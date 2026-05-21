@@ -1,0 +1,1 @@
+ALTER TABLE `ordini` MODIFY COLUMN `packId` enum('pack1','pack2','pack3','singolo') NOT NULL;

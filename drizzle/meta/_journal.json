@@ -1,0 +1,293 @@
+{
+  "version": "7",
+  "dialect": "mysql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "5",
+      "when": 1778150870855,
+      "tag": "0000_robust_lockjaw",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1778151068634,
+      "tag": "0001_blushing_enchantress",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1778156397363,
+      "tag": "0002_mature_skin",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1778161063105,
+      "tag": "0003_smooth_silk_fever",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1778219150729,
+      "tag": "0004_mushy_the_renegades",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1778220933853,
+      "tag": "0005_broken_titania",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1778221346642,
+      "tag": "0006_conscious_speed_demon",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "5",
+      "when": 1778221367428,
+      "tag": "0007_sweet_midnight",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "5",
+      "when": 1778237926076,
+      "tag": "0008_unknown_epoch",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "5",
+      "when": 1778526717425,
+      "tag": "0009_worried_krista_starr",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "5",
+      "when": 1778530757743,
+      "tag": "0010_keen_taskmaster",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "5",
+      "when": 1778584304920,
+      "tag": "0011_married_maddog",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "5",
+      "when": 1778587079426,
+      "tag": "0012_thankful_amazoness",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "5",
+      "when": 1778587346190,
+      "tag": "0013_purple_lockjaw",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "5",
+      "when": 1778593419845,
+      "tag": "0014_smiling_joseph",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "5",
+      "when": 1778593456048,
+      "tag": "0015_cheerful_captain_america",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "5",
+      "when": 1778595758209,
+      "tag": "0016_perfect_franklin_richards",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "5",
+      "when": 1778596576684,
+      "tag": "0017_sloppy_ben_grimm",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "5",
+      "when": 1778602203812,
+      "tag": "0018_brief_malice",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "5",
+      "when": 1778669526179,
+      "tag": "0019_blushing_johnny_storm",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "5",
+      "when": 1778737090237,
+      "tag": "0020_sudden_bishop",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "5",
+      "when": 1778825641058,
+      "tag": "0021_shocking_red_skull",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "5",
+      "when": 1778826252469,
+      "tag": "0022_neat_christian_walker",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "5",
+      "when": 1778856894629,
+      "tag": "0023_salty_trish_tilby",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "5",
+      "when": 1778927242437,
+      "tag": "0024_omniscient_ulik",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "5",
+      "when": 1778929922475,
+      "tag": "0025_ambitious_gauntlet",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "5",
+      "when": 1778930667950,
+      "tag": "0026_acoustic_susan_delgado",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "5",
+      "when": 1778932112994,
+      "tag": "0027_military_the_watchers",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "5",
+      "when": 1779086027985,
+      "tag": "0028_fixed_pixie",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "5",
+      "when": 1779086287997,
+      "tag": "0029_clammy_zombie",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "5",
+      "when": 1779094319201,
+      "tag": "0030_promo_sync",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "5",
+      "when": 1779100365742,
+      "tag": "0031_unique_harrier",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "5",
+      "when": 1779101211885,
+      "tag": "0032_unusual_newton_destine",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "5",
+      "when": 1779103649687,
+      "tag": "0033_brown_lady_vermin",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "5",
+      "when": 1779106663724,
+      "tag": "0034_woozy_jigsaw",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "5",
+      "when": 1779126172212,
+      "tag": "0035_mature_triathlon",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "5",
+      "when": 1779169643674,
+      "tag": "0036_numerous_rhino",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "5",
+      "when": 1779181842394,
+      "tag": "0037_kind_king_bedlam",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "5",
+      "when": 1779206156883,
+      "tag": "0038_premium_the_fury",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "5",
+      "when": 1779216909199,
+      "tag": "0039_sudden_freak",
+      "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "5",
+      "when": 1779283395529,
+      "tag": "0040_nervous_queen_noir",
+      "breakpoints": true
+    }
+  ]
+}

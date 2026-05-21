@@ -1,0 +1,1 @@
+ALTER TABLE `ordini` ADD `tipoOrdine` enum('acquisto','assegnazione_admin') DEFAULT 'acquisto' NOT NULL;

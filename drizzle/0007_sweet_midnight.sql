@@ -1,0 +1,1 @@
+ALTER TABLE `listino_personalizzato` MODIFY COLUMN `prezzi` text NOT NULL;

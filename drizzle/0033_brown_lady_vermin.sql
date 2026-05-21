@@ -1,0 +1,1 @@
+ALTER TABLE `premi_nominativi` ADD `pacchettoDiInteresse` varchar(50);

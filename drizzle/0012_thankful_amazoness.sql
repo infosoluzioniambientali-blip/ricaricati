@@ -1,0 +1,1 @@
+ALTER TABLE `installatori` ADD `passwordHash` varchar(255);

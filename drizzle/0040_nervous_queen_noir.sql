@@ -1,0 +1,1 @@
+ALTER TABLE `installatori` ADD `consensoWhatsApp` boolean DEFAULT false NOT NULL;

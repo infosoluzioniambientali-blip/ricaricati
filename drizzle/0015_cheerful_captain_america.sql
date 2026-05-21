@@ -1,0 +1,1 @@
+ALTER TABLE `pratiche` ADD `ordineId` int;

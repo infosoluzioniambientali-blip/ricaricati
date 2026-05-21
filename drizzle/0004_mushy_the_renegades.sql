@@ -1,0 +1,3 @@
+ALTER TABLE `documenti` ADD `categoriaDocumento` varchar(200);--> statement-breakpoint
+ALTER TABLE `pratiche` ADD `tipoIter` enum('connessione_ordinario','connessione_semplificato','gse','terna_gaudi','enea_conto_termico','dogane_officina_elettrica','dogane_dichiarazione_consumo','arera','distribuzione') DEFAULT 'connessione_semplificato';--> statement-breakpoint
+ALTER TABLE `pratiche` ADD `statoIter` varchar(100);

@@ -1,0 +1,1 @@
+ALTER TABLE `config_documenti` ADD `importanza` enum('obbligatorio','consigliato','opzionale') DEFAULT 'opzionale' NOT NULL;

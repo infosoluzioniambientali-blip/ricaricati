@@ -1,0 +1,1 @@
+ALTER TABLE `ordini` ADD `pdfUrl` varchar(512);

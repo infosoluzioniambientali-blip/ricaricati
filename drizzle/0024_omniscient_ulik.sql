@@ -1,0 +1,1 @@
+ALTER TABLE `config_documenti` ADD `nomeDocumento` varchar(300) DEFAULT '' NOT NULL;

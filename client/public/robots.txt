@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /portale/dashboard
+Disallow: /api/
+
+Sitemap: https://soluzionipratiche.info/sitemap.xml

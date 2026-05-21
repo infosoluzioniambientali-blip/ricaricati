@@ -1,0 +1,1 @@
+ALTER TABLE `documenti` ADD `slotNome` varchar(300);

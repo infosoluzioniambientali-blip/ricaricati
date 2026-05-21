@@ -1,0 +1,1 @@
+ALTER TABLE `config_documenti` ADD `note` text;

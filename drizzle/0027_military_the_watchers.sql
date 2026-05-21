@@ -1,0 +1,2 @@
+ALTER TABLE `documenti` MODIFY COLUMN `statoRevisione` enum('in_attesa','approvato','rifiutato') DEFAULT 'in_attesa';--> statement-breakpoint
+ALTER TABLE `config_documenti` DROP COLUMN `nomeDocumento`;

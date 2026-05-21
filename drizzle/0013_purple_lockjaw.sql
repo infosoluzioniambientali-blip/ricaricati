@@ -1,0 +1,1 @@
+ALTER TABLE `installatori` DROP COLUMN `passwordHash`;

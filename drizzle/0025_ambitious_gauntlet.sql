@@ -1,0 +1,1 @@
+ALTER TABLE `pratiche` MODIFY COLUMN `tipoIter` enum('connessione_ordinario','connessione_semplificato','gse','terna_gaudi','enea_conto_termico','dogane_officina_elettrica','dogane_dichiarazione_consumo','arera','distribuzione','progettazione') DEFAULT 'connessione_semplificato';
