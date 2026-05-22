@@ -45,7 +45,7 @@ const redirectUri = `https://${req.get("host")}/auth/google/callback`;      cons
       const userInfo = await userRes.json() as any;
       const openId = `google_${userInfo.id}`;
      const isAdmin = userInfo.email === 'infosoluzioniambientali@gmail.com';
-await db.upsertUser({ openId, name: userInfo.name || userInfo.email, email: userInfo.email, loginMethod: "google", lastSignedIn: new Date(), role: isAdmin ? 'admin' : undefined });)
+await db.upsertUser({ openId, name: userInfo.name || userInfo.email, email: userInfo.email, loginMethod: "google", lastSignedIn: new Date(), role: isAdmin ? 'admin' : undefined });
       const sessionToken = await createSessionToken(openId, userInfo.name || userInfo.email);
       const cookieOptions = getSessionCookieOptions(req);
       res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
