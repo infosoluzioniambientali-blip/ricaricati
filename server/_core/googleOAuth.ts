@@ -18,8 +18,7 @@ async function createSessionToken(openId: string, name: string): Promise<string>
 
 export function registerGoogleOAuthRoutes(app: Express) {
   app.get("/auth/google", (req: Request, res: Response) => {
-    const redirectUri = `${req.protocol}://${req.get("host")}/auth/google/callback`;
-    const params = new URLSearchParams({
+const redirectUri = `https://${req.get("host")}/auth/google/callback`;    const params = new URLSearchParams({
       client_id: GOOGLE_CLIENT_ID,
       redirect_uri: redirectUri,
       response_type: "code",
@@ -33,8 +32,7 @@ export function registerGoogleOAuthRoutes(app: Express) {
     const code = req.query.code as string;
     if (!code) { res.status(400).send("Missing code"); return; }
     try {
-      const redirectUri = `${req.protocol}://${req.get("host")}/auth/google/callback`;
-      const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
+const redirectUri = `https://${req.get("host")}/auth/google/callback`;      const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams({ code, client_id: GOOGLE_CLIENT_ID, client_secret: GOOGLE_CLIENT_SECRET, redirect_uri: redirectUri, grant_type: "authorization_code" }),
