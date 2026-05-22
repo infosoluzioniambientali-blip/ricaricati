@@ -7,12 +7,12 @@ import { defineConfig, type Plugin, type ViteDevServer } from "vite";
 
 
 // =============================================================================
-
+// Manus Debug Collector - Vite Plugin
 // Writes browser logs directly to files, trimmed when exceeding size limit
 // =============================================================================
 
 const PROJECT_ROOT = import.meta.dirname;
-
+const LOG_DIR = path.join(PROJECT_ROOT, ".manus-logs");
 const MAX_LOG_SIZE_BYTES = 1 * 1024 * 1024; // 1MB per log file
 const TRIM_TARGET_BYTES = Math.floor(MAX_LOG_SIZE_BYTES * 0.6); // Trim to 60% to avoid constant re-trimming
 
@@ -70,13 +70,13 @@ function writeToLogFile(source: LogSource, entries: unknown[]) {
 
 /**
  * Vite plugin to collect browser debug logs
- 
+ * - POST /__manus__/logs: Browser sends logs, written directly to files
  * - Files: browserConsole.log, networkRequests.log, sessionReplay.log
  * - Auto-trimmed when exceeding 1MB (keeps newest entries)
  */
-
+function vitePluginManusDebugCollector(): Plugin {
   return {
-  
+    name: "manus-debug-collector",
 
     transformIndexHtml(html) {
       if (process.env.NODE_ENV === "production") {
@@ -88,7 +88,7 @@ function writeToLogFile(source: LogSource, entries: unknown[]) {
           {
             tag: "script",
             attrs: {
-             
+              src: "/__manus__/debug-collector.js",
               defer: true,
             },
             injectTo: "head",
@@ -98,7 +98,8 @@ function writeToLogFile(source: LogSource, entries: unknown[]) {
     },
 
     configureServer(server: ViteDevServer) {
-      
+      // POST /__manus__/logs: Browser sends logs (written directly to files)
+      server.middlewares.use("/__manus__/logs", (req, res, next) => {
         if (req.method !== "POST") {
           return next();
         }
@@ -149,6 +150,7 @@ function writeToLogFile(source: LogSource, entries: unknown[]) {
   };
 }
 
+const plugins = [react(), tailwindcss(), jsxLocPlugin()];
 
 export default defineConfig({
   plugins,
@@ -169,11 +171,11 @@ export default defineConfig({
   server: {
     host: true,
     allowedHosts: [
-      
-      
-     
-    
-      
+      ".manuspre.computer",
+      ".manus.computer",
+      ".manus-asia.computer",
+      ".manuscomputer.ai",
+      ".manusvm.computer",
       "localhost",
       "127.0.0.1",
     ],
