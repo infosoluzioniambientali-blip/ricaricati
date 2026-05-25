@@ -1902,7 +1902,7 @@ function PremiAdminTab() {
 }
 
 export default function Admin() {
-  const { user, isAuthenticated, loading } = useAuth();
+  const { user, isAuthenticated, loading, logout } = useAuth();
   const isAdmin = user?.role === "admin";
   const [tab, setTab] = useState<TabType>("statistiche");
   const [filtroPratica, setFiltroPratica] = useState<string>("tutti");
@@ -2443,11 +2443,14 @@ export default function Admin() {
             <ArrowLeft className="w-4 h-4" />
             <span className="text-sm">Home</span>
           </Link>
-          <div className="flex items-center gap-2 ml-auto">
+          <div className="flex items-center gap-3 ml-auto">
             <Zap className="w-5 h-5 text-[#4ade80]" />
             <span className="font-black text-white" style={{ fontFamily: "Montserrat, sans-serif" }}>
               ADMIN <span className="text-[#f5c518]">PANEL</span>
             </span>
+            <Button onClick={logout} variant="outline" size="sm" className="border-red-500/50 text-red-400 hover:bg-red-500/10 hover:border-red-400 font-bold text-sm ml-2">
+              Logout
+            </Button>
           </div>
         </div>
       </nav>
@@ -5444,6 +5447,72 @@ export default function Admin() {
           </div>
         </div>
       )}
+
+      {/* Modal Cancellazione Ordine Protetta */}
+      {deleteModalOrdineId !== null && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-[#0e3320] border border-[#f5c518]/30 rounded-xl p-6 max-w-md w-full mx-4">
+            <h3 className="text-lg font-bold text-[#f5c518] mb-4">⚠️ Conferma Cancellazione Ordine</h3>
+            <p className="text-white/70 text-sm mb-4">Inserisci la password per confermare l'eliminazione di questo ordine.</p>
+            <input
+              type="password"
+              value={deletePassword}
+              onChange={e => setDeletePassword(e.target.value)}
+              placeholder="Password"
+              className="w-full bg-[#1a4a2e] border border-white/20 text-white rounded-lg px-3 py-2 text-sm mb-4"
+              onKeyDown={e => e.key === "Enter" && deleteOrdineProtected.mutate({ ordineId: deleteModalOrdineId, password: deletePassword })}
+            />
+            <div className="flex gap-2">
+              <button
+                onClick={() => deleteOrdineProtected.mutate({ ordineId: deleteModalOrdineId, password: deletePassword })}
+                disabled={deleteOrdineProtected.isPending || !deletePassword}
+                className="flex-1 bg-red-500/20 text-red-300 hover:bg-red-500/30 font-bold px-4 py-2 rounded-lg text-sm transition-colors disabled:opacity-50"
+              >
+                {deleteOrdineProtected.isPending ? "Eliminando..." : "Elimina"}
+              </button>
+              <button
+                onClick={() => { setDeleteModalOrdineId(null); setDeletePassword(""); }}
+                className="flex-1 bg-white/10 text-white hover:bg-white/20 font-bold px-4 py-2 rounded-lg text-sm transition-colors"
+              >
+                Annulla
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Cancellazione Pratica Protetta */}
+      {deleteModalPraticaId !== null && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-[#0e3320] border border-[#f5c518]/30 rounded-xl p-6 max-w-md w-full mx-4">
+            <h3 className="text-lg font-bold text-[#f5c518] mb-4">⚠️ Conferma Cancellazione Pratica</h3>
+            <p className="text-white/70 text-sm mb-4">Inserisci la password per confermare l'eliminazione di questa pratica.</p>
+            <input
+              type="password"
+              value={deletePassword}
+              onChange={e => setDeletePassword(e.target.value)}
+              placeholder="Password"
+              className="w-full bg-[#1a4a2e] border border-white/20 text-white rounded-lg px-3 py-2 text-sm mb-4"
+              onKeyDown={e => e.key === "Enter" && deletePraticaProtected.mutate({ praticaId: deleteModalPraticaId, password: deletePassword })}
+            />
+            <div className="flex gap-2">
+              <button
+                onClick={() => deletePraticaProtected.mutate({ praticaId: deleteModalPraticaId, password: deletePassword })}
+                disabled={deletePraticaProtected.isPending || !deletePassword}
+                className="flex-1 bg-red-500/20 text-red-300 hover:bg-red-500/30 font-bold px-4 py-2 rounded-lg text-sm transition-colors disabled:opacity-50"
+              >
+                {deletePraticaProtected.isPending ? "Eliminando..." : "Elimina"}
+              </button>
+              <button
+                onClick={() => { setDeleteModalPraticaId(null); setDeletePassword(""); }}
+                className="flex-1 bg-white/10 text-white hover:bg-white/20 font-bold px-4 py-2 rounded-lg text-sm transition-colors"
+              >
+                Annulla
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -5547,72 +5616,6 @@ function DocumentiTab() {
           ))
         )}
       </div>
-
-      {/* Modal Cancellazione Ordine Protetta */}
-      {deleteModalOrdineId !== null && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-[#0e3320] border border-[#f5c518]/30 rounded-xl p-6 max-w-md w-full mx-4">
-            <h3 className="text-lg font-bold text-[#f5c518] mb-4">⚠️ Conferma Cancellazione Ordine</h3>
-            <p className="text-white/70 text-sm mb-4">Inserisci la password per confermare l'eliminazione di questo ordine.</p>
-            <input
-              type="password"
-              value={deletePassword}
-              onChange={e => setDeletePassword(e.target.value)}
-              placeholder="Password"
-              className="w-full bg-[#1a4a2e] border border-white/20 text-white rounded-lg px-3 py-2 text-sm mb-4"
-              onKeyDown={e => e.key === "Enter" && deleteOrdineProtected.mutate({ ordineId: deleteModalOrdineId, password: deletePassword })}
-            />
-            <div className="flex gap-2">
-              <button
-                onClick={() => deleteOrdineProtected.mutate({ ordineId: deleteModalOrdineId, password: deletePassword })}
-                disabled={deleteOrdineProtected.isPending || !deletePassword}
-                className="flex-1 bg-red-500/20 text-red-300 hover:bg-red-500/30 font-bold px-4 py-2 rounded-lg text-sm transition-colors disabled:opacity-50"
-              >
-                {deleteOrdineProtected.isPending ? "Eliminando..." : "Elimina"}
-              </button>
-              <button
-                onClick={() => { setDeleteModalOrdineId(null); setDeletePassword(""); }}
-                className="flex-1 bg-white/10 text-white hover:bg-white/20 font-bold px-4 py-2 rounded-lg text-sm transition-colors"
-              >
-                Annulla
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal Cancellazione Pratica Protetta */}
-      {deleteModalPraticaId !== null && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-[#0e3320] border border-[#f5c518]/30 rounded-xl p-6 max-w-md w-full mx-4">
-            <h3 className="text-lg font-bold text-[#f5c518] mb-4">⚠️ Conferma Cancellazione Pratica</h3>
-            <p className="text-white/70 text-sm mb-4">Inserisci la password per confermare l'eliminazione di questa pratica.</p>
-            <input
-              type="password"
-              value={deletePassword}
-              onChange={e => setDeletePassword(e.target.value)}
-              placeholder="Password"
-              className="w-full bg-[#1a4a2e] border border-white/20 text-white rounded-lg px-3 py-2 text-sm mb-4"
-              onKeyDown={e => e.key === "Enter" && deletePraticaProtected.mutate({ praticaId: deleteModalPraticaId, password: deletePassword })}
-            />
-            <div className="flex gap-2">
-              <button
-                onClick={() => deletePraticaProtected.mutate({ praticaId: deleteModalPraticaId, password: deletePassword })}
-                disabled={deletePraticaProtected.isPending || !deletePassword}
-                className="flex-1 bg-red-500/20 text-red-300 hover:bg-red-500/30 font-bold px-4 py-2 rounded-lg text-sm transition-colors disabled:opacity-50"
-              >
-                {deletePraticaProtected.isPending ? "Eliminando..." : "Elimina"}
-              </button>
-              <button
-                onClick={() => { setDeleteModalPraticaId(null); setDeletePassword(""); }}
-                className="flex-1 bg-white/10 text-white hover:bg-white/20 font-bold px-4 py-2 rounded-lg text-sm transition-colors"
-              >
-                Annulla
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
