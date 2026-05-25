@@ -1,12 +1,13 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { Link } from "wouter";
-import { Zap, LogIn, ChevronDown, Sparkles, Menu, X } from "lucide-react";
+import { Zap, LogIn, ChevronDown, Sparkles, Menu, X, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 interface PremiumNavbarProps {
   isSoloSingole: boolean;
   isAuthenticated: boolean;
   onLoginClick: () => void;
+  onLogout?: () => void;
   onShowMobileMenu: (show: boolean) => void;
   showMobileMenu: boolean;
   packs: Array<{ id: string; nome: string; prezzo: string; praticheRes: number }>;
@@ -16,6 +17,7 @@ export function PremiumNavbar({
   isSoloSingole,
   isAuthenticated,
   onLoginClick,
+  onLogout,
   onShowMobileMenu,
   showMobileMenu,
   packs,
@@ -152,11 +154,24 @@ export function PremiumNavbar({
                 Login
               </Button>
             ) : (
-              <Link href="/portale">
-                <Button variant="outline" className="border-[#f5c518] text-[#f5c518] hover:bg-[#f5c518] hover:text-[#1a4a2e] font-bold text-sm px-4 py-2 transition-all duration-200">
-                  Portale
-                </Button>
-              </Link>
+              <div className="flex items-center gap-2">
+                <Link href="/portale">
+                  <Button variant="outline" className="border-[#f5c518] text-[#f5c518] hover:bg-[#f5c518] hover:text-[#1a4a2e] font-bold text-sm px-4 py-2 transition-all duration-200">
+                    Portale
+                  </Button>
+                </Link>
+                {onLogout && (
+                  <Button
+                    onClick={onLogout}
+                    variant="outline"
+                    size="sm"
+                    className="border-red-500/50 text-red-400 hover:bg-red-500/10 hover:border-red-400 gap-1 px-3 py-2 text-xs"
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                    Logout
+                  </Button>
+                )}
+              </div>
             )}
           </div>
         </div>
@@ -212,11 +227,23 @@ export function PremiumNavbar({
               Login
             </Button>
           ) : (
-            <Link href="/portale" onClick={() => onShowMobileMenu(false)}>
-              <Button variant="outline" className="w-full border-[#f5c518] text-[#f5c518] hover:bg-[#f5c518] hover:text-[#1a4a2e] font-bold text-sm transition-all duration-200">
-                Portale
-              </Button>
-            </Link>
+            <div className="flex flex-col gap-2">
+              <Link href="/portale" onClick={() => onShowMobileMenu(false)}>
+                <Button variant="outline" className="w-full border-[#f5c518] text-[#f5c518] hover:bg-[#f5c518] hover:text-[#1a4a2e] font-bold text-sm transition-all duration-200">
+                  Portale
+                </Button>
+              </Link>
+              {onLogout && (
+                <Button
+                  onClick={() => { onLogout(); onShowMobileMenu(false); }}
+                  variant="outline"
+                  className="w-full border-red-500/50 text-red-400 hover:bg-red-500/10 font-bold text-sm gap-2 transition-all duration-200"
+                >
+                  <LogOut className="w-4 h-4" />
+                  Logout
+                </Button>
+              )}
+            </div>
           )}
         </div>
       )}

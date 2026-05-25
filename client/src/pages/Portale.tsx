@@ -1,12 +1,12 @@
 import { Link } from "wouter";
-import { Zap, HardHat, ArrowLeft, LogIn, UserPlus, FileText, Upload, TrendingUp } from "lucide-react";
+import { Zap, HardHat, ArrowLeft, LogIn, UserPlus, FileText, Upload, TrendingUp, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { getLoginUrl } from "@/const";
 import { trpc } from "@/lib/trpc";
 
 export default function Portale() {
-  const { user, loading, isAuthenticated } = useAuth();
+  const { user, loading, isAuthenticated, logout } = useAuth();
   const { data: installatore, isLoading: loadingInst } = trpc.installatori.mio.useQuery(undefined, { enabled: isAuthenticated });
 
   if (loading || loadingInst) {
@@ -32,6 +32,17 @@ export default function Portale() {
               PORTALE <span className="text-[#f5c518]">INSTALLATORI</span>
             </span>
           </div>
+          {isAuthenticated && (
+            <Button
+              onClick={logout}
+              variant="outline"
+              size="sm"
+              className="border-red-500/50 text-red-400 hover:bg-red-500/10 hover:border-red-400 gap-2 ml-2"
+            >
+              <LogOut className="w-4 h-4" />
+              Logout
+            </Button>
+          )}
         </div>
       </nav>
 

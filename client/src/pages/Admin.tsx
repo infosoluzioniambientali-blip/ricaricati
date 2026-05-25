@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from "react";
+﻿import React, { useState, useEffect } from "react";
 import { Link } from "wouter";
 import { Zap, ArrowLeft, BarChart3, Users, ShoppingCart, FileText,
   CheckCircle, XCircle, Clock, LogIn, Filter, Download, Plus,
   Pencil, Trash2, ChevronDown, ChevronRight, DatabaseBackup, KeyRound, UploadCloud, Package,
   Trophy, Medal, ChevronUp, Building2, TreePine, MapPin, TrendingUp, Globe, Phone, Mail, Factory, Truck, Sun, FileDown,
-  UserPlus, Target, Zap as ZapIcon, Gift, Tag, Send, RefreshCw, AlertCircle, MessageCircle, Search, RotateCcw
+  UserPlus, Target, Zap as ZapIcon, Gift, Tag, Send, RefreshCw, AlertCircle, MessageCircle, Search, RotateCcw, LogOut
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { trpc } from "@/lib/trpc";
@@ -16,7 +16,7 @@ import { LISTINO } from "../../../shared/listino";
 import ProspectInstallatoriTab from "@/components/ProspectInstallatoriTab";
 
 
-type TabType = "statistiche" | "installatori" | "ordini" | "pratiche" | "pack" | "corsa" | "backup" | "documenti" | "crm" | "pec" | "ordini_probabili" | "corsa_100k" | "credito" | "premi" | "bollette";
+type TabType = "statistiche" | "installatori" | "ordini" | "pratiche" | "pack" | "corsa" | "backup" | "documenti" | "crm" | "pec" | "ordini_probabili" | "corsa_100k" | "credito" | "premi" | "bollette" | "promo";
 
 // ─── COMPONENTE ORDINI PROBABILI ─────────────────────────────────────────────
 // ─── COMPONENTE DROPDOWN PRODOTTO ─────────────────────────────────────────────
@@ -1517,6 +1517,249 @@ function SogliaPackOmaggioForm({ installatori }: { installatori: any[] }) {
   );
 }
 
+// ─── PROMO ADMIN TAB ─────────────────────────────────────────────────────────
+function PromoAdminTab({ installatoriDropdown }: { installatoriDropdown: any[] }) {
+  const utils = trpc.useUtils();
+  const { data: promos = [], isLoading } = trpc.promo.listaAdmin.useQuery();
+
+  const [showForm, setShowForm] = React.useState(false);
+  const [editPromo, setEditPromo] = React.useState<any | null>(null);
+
+  const [formTitolo, setFormTitolo] = React.useState("");
+  const [formDescrizione, setFormDescrizione] = React.useState("");
+  const [formPrezzo, setFormPrezzo] = React.useState("");
+  const [formPrezzoOriginale, setFormPrezzoOriginale] = React.useState("");
+  const [formCta, setFormCta] = React.useState("Scopri di più");
+  const [formCtaUrl, setFormCtaUrl] = React.useState("");
+  const [formScadenza, setFormScadenza] = React.useState("");
+  const [formAttivo, setFormAttivo] = React.useState(true);
+  const [formColore, setFormColore] = React.useState("yellow");
+  const [formOrdinePromo, setFormOrdinePromo] = React.useState(0);
+  const [formVisibilita, setFormVisibilita] = React.useState<"singolo" | "tutti" | "home">("home");
+  const [formInstIds, setFormInstIds] = React.useState<number[]>([]);
+
+  const crea = trpc.promo.crea.useMutation({ onSuccess: () => utils.promo.listaAdmin.invalidate() });
+  const modifica = trpc.promo.modifica.useMutation({ onSuccess: () => utils.promo.listaAdmin.invalidate() });
+  const elimina = trpc.promo.elimina.useMutation({ onSuccess: () => utils.promo.listaAdmin.invalidate() });
+
+  const resetForm = () => {
+    setFormTitolo(""); setFormDescrizione(""); setFormPrezzo(""); setFormPrezzoOriginale("");
+    setFormCta("Scopri di più"); setFormCtaUrl(""); setFormScadenza(""); setFormAttivo(true);
+    setFormColore("yellow"); setFormOrdinePromo(0); setFormVisibilita("home"); setFormInstIds([]);
+  };
+
+  const handleSubmit = async () => {
+    if (!formTitolo.trim()) { toast.error("Inserisci un titolo"); return; }
+    const base = {
+      titolo: formTitolo,
+      descrizione: formDescrizione || undefined,
+      prezzo: formPrezzo ? Number(formPrezzo) : undefined,
+      prezzoOriginale: formPrezzoOriginale ? Number(formPrezzoOriginale) : undefined,
+      cta: formCta || "Scopri di più",
+      ctaUrl: formCtaUrl || undefined,
+      scadenza: formScadenza || undefined,
+      attivo: formAttivo,
+      colore: formColore,
+      ordine: formOrdinePromo,
+      visibilita: formVisibilita,
+    };
+    if (editPromo) {
+      await modifica.mutateAsync({ id: editPromo.id, ...base, installatoreId: formVisibilita === "singolo" ? (formInstIds[0] || 0) : 0 });
+      toast.success("Promo aggiornata!");
+      setEditPromo(null); resetForm(); setShowForm(false);
+    } else {
+      if (formVisibilita === "singolo" && formInstIds.length > 0) {
+        for (const instId of formInstIds) { await crea.mutateAsync({ ...base, installatoreId: instId }); }
+        toast.success(`${formInstIds.length} promo create!`);
+      } else {
+        await crea.mutateAsync({ ...base, installatoreId: 0 });
+        toast.success("Promo creata!");
+      }
+      resetForm(); setShowForm(false);
+    }
+  };
+
+  const handleEdit = (p: any) => {
+    setEditPromo(p);
+    setFormTitolo(p.titolo || ""); setFormDescrizione(p.descrizione || "");
+    setFormPrezzo(p.prezzo ? String(p.prezzo) : ""); setFormPrezzoOriginale(p.prezzoOriginale ? String(p.prezzoOriginale) : "");
+    setFormCta(p.cta || "Scopri di più"); setFormCtaUrl(p.ctaUrl || "");
+    setFormScadenza(p.scadenza ? new Date(p.scadenza).toISOString().split("T")[0] : "");
+    setFormAttivo(p.attivo !== false); setFormColore(p.colore || "yellow");
+    setFormOrdinePromo(p.ordine || 0); setFormVisibilita(p.visibilita || "home");
+    setFormInstIds(p.installatoreId ? [p.installatoreId] : []);
+    setShowForm(true);
+  };
+
+  const generateWhatsApp = (p: any) => {
+    const parts = [`*${p.titolo}*`];
+    if (p.descrizione) parts.push(p.descrizione);
+    if (p.prezzo) parts.push(`Prezzo: €${Number(p.prezzo).toLocaleString("it-IT")}`);
+    if (p.prezzoOriginale) parts.push(`(Prezzo originale: €${Number(p.prezzoOriginale).toLocaleString("it-IT")})`);
+    if (p.ctaUrl) parts.push(p.ctaUrl);
+    return `https://wa.me/?text=${encodeURIComponent(parts.join("\n"))}`;
+  };
+
+  const ic = "bg-[#0e3320] border border-white/20 text-white rounded-lg px-3 py-2 text-sm placeholder:text-white/30 focus:outline-none focus:border-[#f5c518] w-full";
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h2 className="text-2xl font-black text-[#f5c518]">Promo Installatori</h2>
+        <Button onClick={() => { resetForm(); setEditPromo(null); setShowForm(!showForm); }} className="bg-[#f5c518] text-[#1a4a2e] hover:bg-[#f5c518]/90 font-bold gap-2">
+          <Plus className="w-4 h-4" />{showForm ? "Chiudi" : "Nuova Promo"}
+        </Button>
+      </div>
+
+      {showForm && (
+        <div className="bg-[#0e3320] rounded-2xl p-6 border border-[#f5c518]/30 space-y-4">
+          <h3 className="font-black text-[#f5c518]">{editPromo ? "Modifica Promo" : "Nuova Promo"}</h3>
+          <div className="grid sm:grid-cols-2 gap-4">
+            <div>
+              <label className="text-white/60 text-xs mb-1 block">Titolo *</label>
+              <input className={ic} value={formTitolo} onChange={e => setFormTitolo(e.target.value)} placeholder="Es. Offerta Primavera" />
+            </div>
+            <div>
+              <label className="text-white/60 text-xs mb-1 block">Visibilità</label>
+              <select className={ic} value={formVisibilita} onChange={e => setFormVisibilita(e.target.value as any)}>
+                <option value="home">Homepage (pubblica)</option>
+                <option value="tutti">Tutti gli installatori</option>
+                <option value="singolo">Installatori specifici</option>
+              </select>
+            </div>
+            <div className="sm:col-span-2">
+              <label className="text-white/60 text-xs mb-1 block">Descrizione</label>
+              <textarea className={`${ic} min-h-[80px] resize-y`} value={formDescrizione} onChange={e => setFormDescrizione(e.target.value)} placeholder="Descrizione della promozione..." />
+            </div>
+            <div>
+              <label className="text-white/60 text-xs mb-1 block">Prezzo (€)</label>
+              <input type="number" className={ic} value={formPrezzo} onChange={e => setFormPrezzo(e.target.value)} placeholder="Es. 1990" />
+            </div>
+            <div>
+              <label className="text-white/60 text-xs mb-1 block">Prezzo Originale (€) — per mostrare sconto</label>
+              <input type="number" className={ic} value={formPrezzoOriginale} onChange={e => setFormPrezzoOriginale(e.target.value)} placeholder="Es. 2500" />
+            </div>
+            {formPrezzo && formPrezzoOriginale && Number(formPrezzoOriginale) > Number(formPrezzo) && (
+              <div className="sm:col-span-2">
+                <p className="text-green-400 text-sm font-bold">Sconto: {Math.round((1 - Number(formPrezzo) / Number(formPrezzoOriginale)) * 100)}% — Risparmi €{(Number(formPrezzoOriginale) - Number(formPrezzo)).toLocaleString("it-IT")}</p>
+              </div>
+            )}
+            <div>
+              <label className="text-white/60 text-xs mb-1 block">Testo CTA</label>
+              <input className={ic} value={formCta} onChange={e => setFormCta(e.target.value)} placeholder="Scopri di più" />
+            </div>
+            <div>
+              <label className="text-white/60 text-xs mb-1 block">URL CTA</label>
+              <input className={ic} value={formCtaUrl} onChange={e => setFormCtaUrl(e.target.value)} placeholder="https://..." />
+            </div>
+            <div>
+              <label className="text-white/60 text-xs mb-1 block">Scadenza</label>
+              <input type="date" className={ic} value={formScadenza} onChange={e => setFormScadenza(e.target.value)} />
+            </div>
+            <div>
+              <label className="text-white/60 text-xs mb-1 block">Colore Badge</label>
+              <select className={ic} value={formColore} onChange={e => setFormColore(e.target.value)}>
+                <option value="yellow">Giallo</option>
+                <option value="green">Verde</option>
+                <option value="blue">Blu</option>
+                <option value="red">Rosso</option>
+                <option value="purple">Viola</option>
+              </select>
+            </div>
+            <div className="flex items-center gap-3 sm:col-span-2">
+              <label className="text-white/60 text-sm">Promo attiva</label>
+              <input type="checkbox" checked={formAttivo} onChange={e => setFormAttivo(e.target.checked)} className="w-4 h-4 accent-[#f5c518]" />
+            </div>
+          </div>
+
+          {formVisibilita === "singolo" && (
+            <div>
+              <label className="text-white/60 text-xs mb-2 block">
+                Installatori destinatari ({formInstIds.length} selezionati)
+                {!editPromo && formInstIds.length > 1 && <span className="text-[#f5c518] ml-2">→ Verrà creata 1 promo per ognuno</span>}
+              </label>
+              <div className="flex gap-2 mb-2">
+                <Button size="sm" variant="outline" className="border-white/20 text-white/60 text-xs" onClick={() => setFormInstIds(installatoriDropdown.map((i: any) => i.id || i.installatore?.id).filter(Boolean))}>Seleziona Tutti</Button>
+                <Button size="sm" variant="outline" className="border-white/20 text-white/60 text-xs" onClick={() => setFormInstIds([])}>Deseleziona Tutti</Button>
+              </div>
+              <div className="max-h-52 overflow-y-auto bg-[#1a4a2e] rounded-lg border border-white/10 p-3 space-y-1">
+                {installatoriDropdown.map((inst: any) => {
+                  const id = inst.id || inst.installatore?.id;
+                  const nome = inst.ragioneSociale || inst.installatore?.ragioneSociale || inst.nome || `#${id}`;
+                  return (
+                    <label key={id} className="flex items-center gap-2 cursor-pointer hover:bg-white/5 rounded px-2 py-1">
+                      <input type="checkbox" checked={formInstIds.includes(id)} onChange={e => { if (e.target.checked) setFormInstIds(prev => [...prev, id]); else setFormInstIds(prev => prev.filter(x => x !== id)); }} className="accent-[#f5c518]" />
+                      <span className="text-white text-sm">{nome}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          <div className="flex gap-3 pt-2">
+            <Button onClick={handleSubmit} disabled={crea.isPending || modifica.isPending} className="bg-[#f5c518] text-[#1a4a2e] hover:bg-[#f5c518]/90 font-bold">
+              {editPromo ? "Salva Modifiche" : (formVisibilita === "singolo" && formInstIds.length > 1 ? `Crea ${formInstIds.length} Promo` : "Crea Promo")}
+            </Button>
+            <Button variant="outline" onClick={() => { setShowForm(false); setEditPromo(null); resetForm(); }} className="border-white/20 text-white/60">Annulla</Button>
+          </div>
+        </div>
+      )}
+
+      {isLoading ? (
+        <div className="flex justify-center py-8"><div className="w-8 h-8 border-2 border-[#f5c518] border-t-transparent rounded-full animate-spin" /></div>
+      ) : (promos as any[]).length === 0 ? (
+        <div className="bg-[#0e3320] rounded-2xl p-10 text-center border border-white/10">
+          <Tag className="w-12 h-12 text-white/20 mx-auto mb-4" />
+          <p className="text-white/40">Nessuna promo creata ancora</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {(promos as any[]).map((p) => {
+            const instNome = p.installatoreId
+              ? (installatoriDropdown.find((i: any) => (i.id || i.installatore?.id) === p.installatoreId)?.ragioneSociale || `Inst. #${p.installatoreId}`)
+              : null;
+            return (
+              <div key={p.id} className="bg-[#0e3320] rounded-xl p-5 border border-white/10 flex items-start gap-4">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap mb-1">
+                    <span className="font-black text-white">{p.titolo}</span>
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${p.attivo ? "bg-green-500/20 text-green-400" : "bg-gray-500/20 text-gray-400"}`}>{p.attivo ? "Attivo" : "Disattivo"}</span>
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-[#f5c518]/10 text-[#f5c518] font-bold">
+                      {p.visibilita === "home" ? "Homepage" : p.visibilita === "tutti" ? "Tutti gli installatori" : "Singolo"}
+                    </span>
+                    {instNome && <span className="text-xs text-white/50">→ {instNome}</span>}
+                  </div>
+                  {p.descrizione && <p className="text-white/60 text-sm mb-2 line-clamp-2">{p.descrizione}</p>}
+                  <div className="flex flex-wrap gap-4 text-sm">
+                    {p.prezzo && <span className="text-[#f5c518] font-black">€{Number(p.prezzo).toLocaleString("it-IT")}</span>}
+                    {p.prezzoOriginale && <span className="text-white/40 line-through text-xs">€{Number(p.prezzoOriginale).toLocaleString("it-IT")}</span>}
+                    {p.scadenza && <span className="text-white/40 text-xs">Scade: {new Date(p.scadenza).toLocaleDateString("it-IT")}</span>}
+                    {p.cta && <span className="text-white/50 text-xs">CTA: {p.cta}</span>}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <a href={generateWhatsApp(p)} target="_blank" rel="noopener noreferrer">
+                    <Button size="sm" className="bg-green-600 hover:bg-green-500 text-white gap-1 font-bold text-xs px-3 py-2">
+                      <MessageCircle className="w-3.5 h-3.5" />WA
+                    </Button>
+                  </a>
+                  <Button size="sm" variant="outline" onClick={() => handleEdit(p)} className="border-white/20 text-white gap-1 text-xs px-3 py-2">
+                    <Pencil className="w-3.5 h-3.5" />Modifica
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => { if (confirm("Eliminare questa promo?")) elimina.mutate({ id: p.id }); }} className="border-red-500/30 text-red-400 hover:bg-red-500/10 text-xs px-3 py-2">
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── PREMI ADMIN TAB ───────────────────────────────────────────────────────────────────
 // ─── DEBUG BOLLETTE ──────────────────────────────────────────────────────────
 function BolletteDebugTab() {
@@ -1902,7 +2145,7 @@ function PremiAdminTab() {
 }
 
 export default function Admin() {
-  const { user, isAuthenticated, loading } = useAuth();
+  const { user, isAuthenticated, loading, logout } = useAuth();
   const isAdmin = user?.role === "admin";
   const [tab, setTab] = useState<TabType>("statistiche");
   const [filtroPratica, setFiltroPratica] = useState<string>("tutti");
@@ -1923,9 +2166,10 @@ export default function Admin() {
   const [filtroStatoOrdini, setFiltroStatoOrdini] = useState<string>("");
   const [ricercaNomePratiche, setRicercaNomePratiche] = useState<string>("");
   const [ricercaNomeInstallatori, setRicercaNomeInstallatori] = useState<string>("");
+  const [filtroStatoInstallatori, setFiltroStatoInstallatori] = useState<string>("");
   
   // installatoriDropdown: serve per ordini, pratiche, credito, premi (modal promo con visibilità singolo) e pack
-  const { data: installatoriDropdown = [] } = trpc.installatori.lista.useQuery(undefined, { enabled: isAdmin && (tab === "ordini" || tab === "pratiche" || tab === "credito" || tab === "premi" || tab === "pack" || tab === "installatori") });
+  const { data: installatoriDropdown = [] } = trpc.installatori.lista.useQuery(undefined, { enabled: isAdmin && (tab === "ordini" || tab === "pratiche" || tab === "credito" || tab === "premi" || tab === "pack" || tab === "installatori" || tab === "promo") });
   const { data: ordiniTutti = [] } = trpc.ordini.tutti.useQuery(undefined, { enabled: isAdmin && (tab === "ordini" || tab === "pratiche") });
   const { data: packConfigOrdini = [] } = trpc.packConfig.lista.useQuery(undefined, { enabled: isAdmin && tab === "ordini" });
   const { data: pratiche = [] } = trpc.pratiche.tutte.useQuery(undefined, { enabled: isAdmin && tab === "pratiche" });
@@ -1946,27 +2190,31 @@ export default function Admin() {
     .filter((p: any) => !filtroInstallatorePratiche || String(p.installatoreId) === filtroInstallatorePratiche)
     .filter((p: any) => !ricercaNomePratiche || p.nomeTitolare?.toLowerCase().includes(ricercaNomePratiche.toLowerCase()) || p.cognomeTitolare?.toLowerCase().includes(ricercaNomePratiche.toLowerCase()));
   
-  // Installatori filtrati per nome, P.IVA, Codice Fiscale
-  const installatoriFiltered = installatori
-    .filter((inst: any) => {
+  // Installatori filtrati per nome, P.IVA, Codice Fiscale, email, telefono
+  const installatoriFiltered = (installatori as any[])
+    .filter((item: any) => {
+      const inst = item.installatore ?? item;
+      const u = item.user;
+      if (!ricercaNomeInstallatori && !filtroStatoInstallatori) return true;
+      if (filtroStatoInstallatori && inst.stato !== filtroStatoInstallatori) return false;
       if (!ricercaNomeInstallatori) return true;
       const searchTerm = ricercaNomeInstallatori.toLowerCase();
       const ragioneSociale = inst.ragioneSociale?.toLowerCase() || "";
       const nome = inst.nome?.toLowerCase() || "";
-      const email = inst.email?.toLowerCase() || "";
-      const partitaIva = inst.partitaIva?.toLowerCase() || "";
-      const codiceFiscale = inst.codiceFiscale?.toLowerCase() || "";
-      
-      // Ricerca per substring: "Gaia" trova "Gaestapper"
-      return ragioneSociale.includes(searchTerm) || 
-             nome.includes(searchTerm) || 
+      const email = (u?.email || inst.email || "").toLowerCase();
+      const partitaIva = (inst.partitaIva || "").toLowerCase();
+      const codiceFiscale = (inst.codiceFiscale || "").toLowerCase();
+      const telefono = (inst.telefono || "").toLowerCase();
+      return ragioneSociale.includes(searchTerm) ||
+             nome.includes(searchTerm) ||
              email.includes(searchTerm) ||
              partitaIva.includes(searchTerm) ||
-             codiceFiscale.includes(searchTerm);
+             codiceFiscale.includes(searchTerm) ||
+             telefono.includes(searchTerm);
     })
   
   // Conteggio risultati ricerca
-  const conteggioRicercaInstallatori = ricercaNomeInstallatori ? installatoriFiltered.length : installatori.length;
+  const conteggioRicercaInstallatori = (ricercaNomeInstallatori || filtroStatoInstallatori) ? installatoriFiltered.length : installatori.length;
 
   // Diagnostica: installatori senza userId
   // DISABILITATO: procedura non registrata nel backend
@@ -1993,7 +2241,7 @@ export default function Admin() {
     onSuccess: (r) => { toast.success(`Backup salvato! (${(r.dimensioneBytes / 1024).toFixed(1)} KB)`); refetchStorico(); },
     onError: (e) => toast.error(e.message),
   });
-  const [freqSelezionata, setFreqSelezionata] = useState<"giornaliero" | "settimanale" | "mensile">("settimanale");
+  const [freqSelezionata, setFreqSelezionata] = useState<"orario" | "giornaliero" | "settimanale" | "mensile">("settimanale");
   const [backupAttivo, setBackupAttivo] = useState(false);
 
   const ripristina = trpc.admin.ripristinaBackup.useMutation({
@@ -2058,8 +2306,8 @@ export default function Admin() {
   // Promo per installatore specifico
   const { data: promoInstList = [], refetch: refetchPromoInst } = trpc.promo.listaAdmin.useQuery(undefined, { enabled: isAdmin && expandedInstId !== null });
   const { data: documentiPraticaAdmin = [] } = trpc.pratiche.documenti.useQuery(
-    { praticaId: expandedDocPraticaId! },
-    { enabled: expandedDocPraticaId !== null && isAdmin }
+    { praticaId: expandedIterPraticaId! },
+    { enabled: expandedIterPraticaId !== null && isAdmin }
   );
   const { data: corsaData, isLoading: corsaLoading } = trpc.installatori.classifica.useQuery(undefined, { enabled: isAdmin && tab === "corsa", refetchInterval: tab === "corsa" ? 60000 : false });
   const { data: corsaTargetRaw, refetch: refetchCorsaTarget } = trpc.impostazioni.get.useQuery({ chiave: "corsa_target" }, { enabled: isAdmin && tab === "corsa" });
@@ -2107,7 +2355,7 @@ export default function Admin() {
     onError: (e) => toast.error(e.message),
   });
   const generaCodiciPromo = trpc.installatori.generaCodiciPromo.useMutation({
-    onSuccess: (r: any) => { toast.success(`Codici promo generati: ${r.generati} nuovi, ${r.esistenti} già presenti`); utils.installatori.lista.invalidate(); },
+    onSuccess: (r: any) => { toast.success(`Codici promo generati: ${r.aggiornati} installatori aggiornati`); utils.installatori.lista.invalidate(); },
     onError: (e: any) => toast.error(e.message),
   });
   const { data: ordiniSingoliInst = [], isLoading: ordiniSingoliLoading } = trpc.installatori.ordiniSingoli.useQuery(
@@ -2207,15 +2455,23 @@ export default function Admin() {
   const [deleteModalPraticaId, setDeleteModalPraticaId] = React.useState<number | null>(null);
   
   const assegnaPackaggio = trpc.ordini.assegnaPackaggio.useMutation({
-    onSuccess: () => { 
-      utils.ordini.tutti.invalidate(); 
-      utils.admin.packAcquistati.invalidate(); 
+    onSuccess: () => {
+      utils.ordini.tutti.invalidate();
+      utils.admin.packAcquistati.invalidate();
       utils.installatori.lista.invalidate();
-      toast.success("Pacchetto assegnato all'installatore"); 
-      setShowPackModal(null); 
+      toast.success("Pacchetto assegnato all'installatore");
+      setShowPackModal(null);
+      setQuickAssignInstId("");
+      setQuickAssignPackId("");
+      setQuickAssignPrezzoManuale("");
+      setQuickAssignNote("");
     },
     onError: (e) => toast.error(e.message),
   });
+  const [quickAssignInstId, setQuickAssignInstId] = React.useState("");
+  const [quickAssignPackId, setQuickAssignPackId] = React.useState("");
+  const [quickAssignPrezzoManuale, setQuickAssignPrezzoManuale] = React.useState("");
+  const [quickAssignNote, setQuickAssignNote] = React.useState("");
 
   const associaUserIdAPratica = trpc.admin.associaUserIdAPratica.useMutation({
     onSuccess: () => { 
@@ -2351,15 +2607,15 @@ export default function Admin() {
   const [showCreaInst, setShowCreaInst] = useState(false);
   const [editInstId, setEditInstId] = useState<number | null>(null);
   const [formInst, setFormInst] = useState({ ragioneSociale: "", partitaIva: "", telefono: "", citta: "", provincia: "", email: "", sito: "", indirizzo: "", settore: "", regione: "", specializzazioni: "" });
-  const [editFormInst, setEditFormInst] = useState({ ragioneSociale: "", partitaIva: "", codiceFiscale: "", telefono: "", citta: "", provincia: "", stato: "approvato" as "in_attesa" | "approvato" | "rifiutato", saldoPratiche: 0 });
+  const [editFormInst, setEditFormInst] = useState({ ragioneSociale: "", partitaIva: "", codiceFiscale: "", telefono: "", citta: "", provincia: "", stato: "approvato" as "in_attesa" | "approvato" | "rifiutato", saldoPratiche: 0, consensoWhatsApp: false });
   const resetFormInst = () => setFormInst({ ragioneSociale: "", partitaIva: "", telefono: "", citta: "", provincia: "", email: "", sito: "", indirizzo: "", settore: "", regione: "", specializzazioni: "" });
 
   const [showCreaOrdine, setShowCreaOrdine] = useState(false);
   const [editOrdineId, setEditOrdineId] = useState<number | null>(null);
   const [expandedOrdineId, setExpandedOrdineId] = useState<number | null>(null);
-  const [formOrdine, setFormOrdine] = useState({ installatoreId: "", packId: "pack1" as "pack1" | "pack2" | "pack3", metodoPagamento: "bonifico" as "paypal" | "bonifico", nomeAcquirente: "", emailAcquirente: "", telefonoAcquirente: "", ragioneSocialeAcquirente: "", note: "" });
-  const [editFormOrdine, setEditFormOrdine] = useState({ stato: "in_attesa" as "in_attesa" | "pagato" | "annullato", note: "", pratiche_incluse: 0, pratiche_usate: 0 });
-  const resetFormOrdine = () => setFormOrdine({ installatoreId: "", packId: "pack1", metodoPagamento: "bonifico", nomeAcquirente: "", emailAcquirente: "", telefonoAcquirente: "", ragioneSocialeAcquirente: "", note: "" });
+  const [formOrdine, setFormOrdine] = useState({ installatoreId: "", packId: "pack1" as "pack1" | "pack2" | "pack3" | "custom", metodoPagamento: "bonifico" as "paypal" | "bonifico", nomeAcquirente: "", emailAcquirente: "", telefonoAcquirente: "", ragioneSocialeAcquirente: "", note: "", importoCustom: "", nomePacchettoCustom: "", praticheResCustom: "", praticheBusCustom: "" });
+  const [editFormOrdine, setEditFormOrdine] = useState({ stato: "in_attesa" as "in_attesa" | "pagato" | "annullato", note: "", pratiche_incluse: 0, pratiche_usate: 0, importo: "" });
+  const resetFormOrdine = () => setFormOrdine({ installatoreId: "", packId: "pack1", metodoPagamento: "bonifico", nomeAcquirente: "", emailAcquirente: "", telefonoAcquirente: "", ragioneSocialeAcquirente: "", note: "", importoCustom: "", nomePacchettoCustom: "", praticheResCustom: "", praticheBusCustom: "" });
 
   const [showRipristinaOrdini, setShowRipristinaOrdini] = useState(false);
   const [showRipristinaPratiche, setShowRipristinaPratiche] = useState(false);
@@ -2422,6 +2678,7 @@ export default function Admin() {
     { id: "backup" as TabType, label: "Backup", icon: DatabaseBackup },
     { id: "documenti" as TabType, label: "Documenti", icon: FileText },
     { id: "crm" as TabType, label: "CRM Prospect", icon: Users },
+    { id: "promo" as TabType, label: "Promo", icon: Tag },
   ];
 
   const TABS_SECONDARY = [
@@ -2448,6 +2705,18 @@ export default function Admin() {
               ADMIN <span className="text-[#f5c518]">PANEL</span>
             </span>
           </div>
+          {user && (
+            <span className="text-white/40 text-xs hidden sm:block">{user.email}</span>
+          )}
+          <Button
+            onClick={logout}
+            variant="outline"
+            size="sm"
+            className="border-red-500/50 text-red-400 hover:bg-red-500/10 hover:border-red-400 gap-2"
+          >
+            <LogOut className="w-4 h-4" />
+            <span className="hidden sm:inline">Logout</span>
+          </Button>
         </div>
       </nav>
 
@@ -2569,15 +2838,22 @@ export default function Admin() {
               </div>
               <div className="flex items-center gap-2 flex-wrap">
                 <div className="relative">
-                  <input type="text" placeholder="Cerca per nome, P.IVA, C.F., email..." value={ricercaNomeInstallatori} onChange={e => setRicercaNomeInstallatori(e.target.value)} className="bg-[#0e3320] border border-white/10 rounded-lg px-3 py-2 text-white text-sm font-medium placeholder-white/30 focus:border-[#f5c518]/50 focus:outline-none transition-colors" />
+                  <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-white/30 pointer-events-none" />
+                  <input type="text" placeholder="Cerca nome, P.IVA, C.F., email, telefono..." value={ricercaNomeInstallatori} onChange={e => setRicercaNomeInstallatori(e.target.value)} className="bg-[#0e3320] border border-white/10 rounded-lg pl-9 pr-8 py-2 text-white text-sm font-medium placeholder-white/30 focus:border-[#f5c518]/50 focus:outline-none transition-colors w-64" />
                   {ricercaNomeInstallatori && (
                     <button onClick={() => setRicercaNomeInstallatori("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-white/40 hover:text-white transition-colors" title="Cancella ricerca">
                       ✕
                     </button>
                   )}
                 </div>
+                <select value={filtroStatoInstallatori} onChange={e => setFiltroStatoInstallatori(e.target.value)} className="bg-[#0e3320] border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:border-[#f5c518]/50 focus:outline-none">
+                  <option value="">Tutti gli stati</option>
+                  <option value="approvato">✓ Approvati</option>
+                  <option value="in_attesa">⏳ In attesa</option>
+                  <option value="rifiutato">✗ Non abilitati</option>
+                </select>
                 <Button size="sm" onClick={() => {
-                  const csv = [['ID', 'Azienda', 'Email', 'Telefono', 'Città', 'Provincia'].join(','), ...installatoriFiltered.map(({ installatore: inst }) => [inst.id, inst.ragioneSociale || inst.nome || 'N/A', inst.email || 'N/A', inst.telefono || 'N/A', inst.citta || 'N/A', inst.provincia || 'N/A'].map(v => `"${v}"`).join(','))].join('\n');
+                  const csv = [['ID', 'Azienda', 'Email', 'Telefono', 'Città', 'Provincia', 'Stato'].join(','), ...installatoriFiltered.map(({ installatore: inst, user: u }: any) => [inst.id, inst.ragioneSociale || inst.nome || 'N/A', u?.email || inst.email || 'N/A', inst.telefono || 'N/A', inst.citta || 'N/A', inst.provincia || 'N/A', inst.stato || 'N/A'].map((v: any) => `"${v}"`).join(','))].join('\n');
                   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
                   const link = document.createElement('a');
                   link.href = URL.createObjectURL(blob);
@@ -2764,7 +3040,7 @@ export default function Admin() {
                               <MessageCircle className="w-3.5 h-3.5" />
                             </button>
                           )}
-                          <button onClick={() => { setEditInstId(inst.id); setEditFormInst({ ragioneSociale: inst.ragioneSociale, partitaIva: inst.partitaIva ?? "", codiceFiscale: inst.codiceFiscale ?? "", telefono: inst.telefono ?? "", citta: inst.citta ?? "", provincia: inst.provincia ?? "", stato: inst.stato, saldoPratiche: inst.saldoPratiche }); }}
+                          <button onClick={() => { setEditInstId(inst.id); setEditFormInst({ ragioneSociale: inst.ragioneSociale, partitaIva: inst.partitaIva ?? "", codiceFiscale: inst.codiceFiscale ?? "", telefono: inst.telefono ?? "", citta: inst.citta ?? "", provincia: inst.provincia ?? "", stato: inst.stato, saldoPratiche: inst.saldoPratiche, consensoWhatsApp: inst.consensoWhatsApp ?? false }); }}
                             className="p-1.5 rounded-lg bg-blue-400/10 text-blue-400 hover:bg-blue-400/20 transition-colors" title="Modifica">
                             <Pencil className="w-3.5 h-3.5" />
                           </button>
@@ -3108,37 +3384,11 @@ export default function Admin() {
         {/* ── ORDINI ── */}
         {tab === "ordini" && (
           <div>
-            {/* FILTRO RAPIDO - Ordini senza userId */}
-            {(ordini as any[]).filter((o: any) => !o.userId).length > 0 && (
-              <div className="bg-orange-500/10 border border-orange-400/30 rounded-lg p-4 mb-4">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2">
-                    <AlertCircle className="w-4 h-4 text-orange-400" />
-                    <span className="text-orange-300 font-semibold text-sm">⚠️ {(ordini as any[]).filter((o: any) => !o.userId).length} ordini senza userId</span>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button size="sm" variant="ghost" onClick={() => setShowRipristinaOrdini(!showRipristinaOrdini)} className="text-orange-300 hover:bg-orange-500/20 text-xs">{showRipristinaOrdini ? "Nascondi" : "Visualizza"}</Button>
-                    <Button size="sm" onClick={() => setShowRipristinaOrdini(true)} className="bg-orange-500 text-white hover:bg-orange-500/90 text-xs font-bold">Ripristina</Button>
-                  </div>
-                </div>
-                {showRipristinaOrdini && (
-                  <div className="space-y-2 mt-3 pt-3 border-t border-orange-400/20 max-h-64 overflow-y-auto">
-                    {(ordini as any[]).filter((o: any) => !o.userId).map((o: any) => (
-                      <div key={o.id} className="flex items-center gap-2 bg-black/20 p-2 rounded">
-                        <div className="flex-1 min-w-0">
-                          <p className="text-white text-xs font-semibold truncate">Ordine #{o.id} - {o.emailAcquirente}</p>
-                          <p className="text-white/40 text-xs">{o.packId} • {new Date(o.createdAt).toLocaleDateString('it-IT')}</p>
-                        </div>
-                        <input type="number" placeholder="UserId" id={`userId_ordine_${o.id}`} className="w-20 bg-[#1a4a2e] border border-white/20 text-white rounded px-2 py-1 text-xs" />
-                        <Button size="sm" onClick={() => {
-                          const userId = Number((document.getElementById(`userId_ordine_${o.id}`) as HTMLInputElement)?.value);
-                          if (!userId) { toast.error("Inserisci UserId"); return; }
-                          associaUserId.mutate({ installatoreId: o.installatoreId, userId });
-                        }} disabled={associaUserId.isPending} className="bg-green-600 text-white hover:bg-green-600/90 text-xs px-2">{associaUserId.isPending ? "..." : "OK"}</Button>
-                      </div>
-                    ))}
-                  </div>
-                )}
+            {/* Ordini senza userId: messaggio minimale, non bloccante */}
+            {(ordini as any[]).filter((o: any) => !o.userId && o.installatoreId).length > 0 && (
+              <div className="text-xs text-white/30 mb-3 flex items-center gap-2">
+                <AlertCircle className="w-3.5 h-3.5 text-white/20" />
+                {(ordini as any[]).filter((o: any) => !o.userId && o.installatoreId).length} ordini con userId non collegato (non impatta la funzionalità)
               </div>
             )}
 
@@ -3162,6 +3412,7 @@ export default function Admin() {
                   <option value="">— Tutti gli stati —</option>
                   <option value="pagato">Pagato</option>
                   <option value="in_attesa">In Attesa</option>
+                  <option value="annullato">Annullato</option>
                 </select>
                 {/* Ordinamento */}
                 <div className="flex items-center gap-1 bg-[#0e3320] border border-white/10 rounded-lg p-1">
@@ -3201,15 +3452,37 @@ export default function Admin() {
                   <input className={inputCls} placeholder="Email *" value={formOrdine.emailAcquirente} onChange={e => setFormOrdine(f => ({ ...f, emailAcquirente: e.target.value }))} />
                   <input className={inputCls} placeholder="Telefono" value={formOrdine.telefonoAcquirente} onChange={e => setFormOrdine(f => ({ ...f, telefonoAcquirente: e.target.value }))} />
                   <input className={inputCls} placeholder="Ragione sociale" value={formOrdine.ragioneSocialeAcquirente} onChange={e => setFormOrdine(f => ({ ...f, ragioneSocialeAcquirente: e.target.value }))} />
-                  <select className={selectCls} value={formOrdine.installatoreId} onChange={e => setFormOrdine(f => ({ ...f, installatoreId: e.target.value }))}>
+                  <select className={selectCls} value={formOrdine.installatoreId} onChange={e => {
+                    const instRow = (installatoriDropdown as any[]).find((row: any) => String((row.installatore ?? row).id) === e.target.value);
+                    const inst = instRow?.installatore ?? instRow;
+                    setFormOrdine(f => ({
+                      ...f,
+                      installatoreId: e.target.value,
+                      ragioneSocialeAcquirente: f.ragioneSocialeAcquirente || inst?.ragioneSociale || "",
+                      emailAcquirente: f.emailAcquirente || instRow?.user?.email || inst?.email || "",
+                      telefonoAcquirente: f.telefonoAcquirente || inst?.telefono || "",
+                    }));
+                  }}>
                     <option value="">— Installatore (opz.) —</option>
                     {(installatoriDropdown as any[]).map((row: any) => { const inst = row.installatore ?? row; return <option key={inst.id} value={String(inst.id)}>{inst.ragioneSociale || inst.nome || `Installatore #${inst.id}`}</option>; })}
                   </select>
                   <select className={selectCls} value={formOrdine.packId} onChange={e => setFormOrdine(f => ({ ...f, packId: e.target.value as any }))}>
-                    <option value="pack1">Pack 1 — €2.000</option>
-                    <option value="pack2">Pack 2 — €3.150</option>
-                    <option value="pack3">Pack 3 — €5.100</option>
+                    <option value="pack1">Pack 1 — €2.000 (standard)</option>
+                    <option value="pack2">Pack 2 — €3.150 (standard)</option>
+                    <option value="pack3">Pack 3 — €5.100 (standard)</option>
+                    {(packConfigOrdini as any[]).filter((p: any) => !["Pack 1","Pack 2","Pack 3"].includes(p.nome) && p.attivo).map((p: any) => (
+                      <option key={p.id} value={p.slug ?? "custom"}>{p.nome} — €{Number(p.prezzo).toLocaleString("it-IT")}</option>
+                    ))}
+                    <option value="custom">Prezzo Manuale / Personalizzato</option>
                   </select>
+                  {formOrdine.packId === "custom" && (
+                    <>
+                      <input className={inputCls} type="number" min="0" step="50" placeholder="Importo € *" value={formOrdine.importoCustom} onChange={e => setFormOrdine(f => ({ ...f, importoCustom: e.target.value }))} />
+                      <input className={inputCls} placeholder="Nome pacchetto" value={formOrdine.nomePacchettoCustom} onChange={e => setFormOrdine(f => ({ ...f, nomePacchettoCustom: e.target.value }))} />
+                      <input className={inputCls} type="number" min="0" placeholder="Pratiche res. incluse" value={formOrdine.praticheResCustom} onChange={e => setFormOrdine(f => ({ ...f, praticheResCustom: e.target.value }))} />
+                      <input className={inputCls} type="number" min="0" placeholder="Pratiche bus. incluse" value={formOrdine.praticheBusCustom} onChange={e => setFormOrdine(f => ({ ...f, praticheBusCustom: e.target.value }))} />
+                    </>
+                  )}
                   <select className={selectCls} value={formOrdine.metodoPagamento} onChange={e => setFormOrdine(f => ({ ...f, metodoPagamento: e.target.value as any }))}>
                     <option value="bonifico">Bonifico</option>
                     <option value="paypal">PayPal</option>
@@ -3217,7 +3490,22 @@ export default function Admin() {
                   <input className={`${inputCls} col-span-2`} placeholder="Note" value={formOrdine.note} onChange={e => setFormOrdine(f => ({ ...f, note: e.target.value }))} />
                 </div>
                 <div className="flex gap-2">
-                  <Button size="sm" onClick={() => creaOrdine.mutate({ ...formOrdine, installatoreId: formOrdine.installatoreId ? Number(formOrdine.installatoreId) : undefined, stato: "pagato" })} disabled={!formOrdine.nomeAcquirente || !formOrdine.emailAcquirente} className="bg-[#4ade80] text-[#1a4a2e] hover:bg-[#4ade80]/90 font-bold">Crea</Button>
+                  <Button size="sm" onClick={() => {
+                    const payload: any = {
+                      ...formOrdine,
+                      installatoreId: formOrdine.installatoreId ? Number(formOrdine.installatoreId) : undefined,
+                      stato: "pagato",
+                    };
+                    if (formOrdine.packId === "custom") {
+                      payload.importoCustom = formOrdine.importoCustom ? Number(formOrdine.importoCustom) : undefined;
+                      payload.nomePacchetto = formOrdine.nomePacchettoCustom || "Pack Personalizzato";
+                      payload.praticheResCustom = formOrdine.praticheResCustom ? Number(formOrdine.praticheResCustom) : 0;
+                      payload.praticheBusCustom = formOrdine.praticheBusCustom ? Number(formOrdine.praticheBusCustom) : 0;
+                    }
+                    creaOrdine.mutate(payload);
+                  }} disabled={!formOrdine.nomeAcquirente || !formOrdine.emailAcquirente || creaOrdine.isPending} className="bg-[#4ade80] text-[#1a4a2e] hover:bg-[#4ade80]/90 font-bold">
+                    {creaOrdine.isPending ? "Salvataggio..." : "Crea Ordine"}
+                  </Button>
                   <Button size="sm" variant="ghost" onClick={() => { setShowCreaOrdine(false); resetFormOrdine(); }} className="text-white/50">Annulla</Button>
                 </div>
               </div>
@@ -3336,8 +3624,8 @@ export default function Admin() {
                               </button>
                             )}
                             {o.stato !== "annullato" && (
-                              <button onClick={() => aggiornaOrdine.mutate({ id: o.id, stato: "annullato" })}
-                                className="p-1.5 rounded-lg bg-red-400/10 text-red-400 hover:bg-red-400/20 transition-colors" title="Annulla ordine">
+                              <button onClick={() => { if (confirm(`Annullare l'ordine #${o.id}? Questa azione è reversibile.`)) aggiornaOrdine.mutate({ id: o.id, stato: "annullato" }); }}
+                                className="p-1.5 rounded-lg bg-red-400/10 text-red-400 hover:bg-red-400/20 transition-colors" title="Annulla ordine (richiede conferma)">
                                 <XCircle className="w-3.5 h-3.5" />
                               </button>
                             )}
@@ -3395,19 +3683,20 @@ export default function Admin() {
                         {/* Form modifica inline */}
                         {editOrdineId === o.id && (
                           <div className="px-5 pb-4 pt-2 bg-blue-900/10 border-t border-blue-400/20">
-                            <p className="text-blue-400 text-xs font-bold mb-3">Modifica ordine</p>
+                            <p className="text-blue-400 text-xs font-bold mb-3">Modifica ordine #{o.id}</p>
                             <div className="grid grid-cols-2 gap-3">
                               <select className={selectCls} value={editFormOrdine.stato} onChange={e => setEditFormOrdine(f => ({ ...f, stato: e.target.value as any }))}>
                                 <option value="in_attesa">In attesa</option>
                                 <option value="pagato">Pagato</option>
                                 <option value="annullato">Annullato</option>
                               </select>
-                              <input type="number" className={inputCls} placeholder="Pratiche incluse" value={editFormOrdine.pratiche_incluse} onChange={e => setEditFormOrdine(f => ({ ...f, pratiche_incluse: Number(e.target.value) }))} />
-                              <input type="number" className={inputCls} placeholder="Pratiche usate" value={editFormOrdine.pratiche_usate} onChange={e => setEditFormOrdine(f => ({ ...f, pratiche_usate: Number(e.target.value) }))} />
-                              <input className={inputCls} placeholder="Note" value={editFormOrdine.note} onChange={e => setEditFormOrdine(f => ({ ...f, note: e.target.value }))} />
+                              <input type="number" step="50" min="0" className={inputCls} placeholder="Importo €" value={editFormOrdine.importo} onChange={e => setEditFormOrdine(f => ({ ...f, importo: e.target.value }))} />
+                              <input type="number" className={inputCls} placeholder="Pratiche incluse tot." value={editFormOrdine.pratiche_incluse} onChange={e => setEditFormOrdine(f => ({ ...f, pratiche_incluse: Number(e.target.value) }))} />
+                              <input type="number" className={inputCls} placeholder="Pratiche usate tot." value={editFormOrdine.pratiche_usate} onChange={e => setEditFormOrdine(f => ({ ...f, pratiche_usate: Number(e.target.value) }))} />
+                              <input className={`${inputCls} col-span-2`} placeholder="Note" value={editFormOrdine.note} onChange={e => setEditFormOrdine(f => ({ ...f, note: e.target.value }))} />
                             </div>
                             <div className="flex gap-2 mt-3">
-                              <Button size="sm" onClick={() => modificaOrdine.mutate({ id: o.id, ...editFormOrdine })} className="bg-blue-600 hover:bg-blue-500 text-white font-bold">Salva</Button>
+                              <Button size="sm" onClick={() => modificaOrdine.mutate({ id: o.id, ...editFormOrdine, ...(editFormOrdine.importo ? { importo: editFormOrdine.importo } : {}) })} className="bg-blue-600 hover:bg-blue-500 text-white font-bold">Salva</Button>
                               <Button size="sm" variant="ghost" onClick={() => setEditOrdineId(null)} className="text-white/50">Annulla</Button>
                             </div>
                           </div>
@@ -3486,7 +3775,7 @@ export default function Admin() {
                                 className="p-1.5 rounded-lg bg-blue-400/10 text-blue-400 hover:bg-blue-400/20 transition-colors" title="Modifica">
                                 <Pencil className="w-3.5 h-3.5" />
                               </button>
-                              <button onClick={() => { if (confirm("Eliminare questa pratica singola?")) eliminaOrdine.mutate({ id: o.id }); }}
+                              <button onClick={() => setDeleteModalOrdineId(o.id)}
                                 className="p-1.5 rounded-lg bg-red-400/10 text-red-400 hover:bg-red-400/20 transition-colors" title="Elimina">
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
@@ -3533,40 +3822,11 @@ export default function Admin() {
         {/* ── PRATICHE ── */}
         {tab === "pratiche" && (
           <div>
-            {/* FILTRO RAPIDO - Pratiche senza userId */}
-            {(pratiche as any[]).filter((p: any) => !p.installatoreId || !(ordini as any[]).find((o: any) => o.id === p.ordineid && o.userId)).length > 0 && (
-              <div className="bg-red-500/10 border border-red-400/30 rounded-lg p-4 mb-4">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2">
-                    <AlertCircle className="w-4 h-4 text-red-400" />
-                    <span className="text-red-300 font-semibold text-sm">⚠️ {(pratiche as any[]).filter((p: any) => !p.installatoreId || !(ordini as any[]).find((o: any) => o.id === p.ordineid && o.userId)).length} pratiche senza user ID</span>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button size="sm" variant="ghost" onClick={() => setShowRipristinaPratiche(!showRipristinaPratiche)} className="text-red-300 hover:bg-red-500/20 text-xs">{showRipristinaPratiche ? "Nascondi" : "Visualizza"}</Button>
-                    <Button size="sm" onClick={() => setShowRipristinaPratiche(true)} className="bg-red-600 text-white hover:bg-red-600/90 text-xs font-bold">Ripristina</Button>
-                  </div>
-                </div>
-                {showRipristinaPratiche && (
-                  <div className="space-y-2 mt-3 pt-3 border-t border-red-400/20 max-h-64 overflow-y-auto">
-                    {(pratiche as any[]).filter((p: any) => !p.installatoreId || !(ordini as any[]).find((o: any) => o.id === p.ordineid && o.userId)).map((p: any) => {
-                      const ordine = (ordini as any[]).find((o: any) => o.id === p.ordineid);
-                      return (
-                        <div key={p.id} className="flex items-center gap-2 bg-black/20 p-2 rounded">
-                          <div className="flex-1 min-w-0">
-                            <p className="text-white text-xs font-semibold truncate">Pratica #{p.id} - {p.nomeTitolare}</p>
-                            <p className="text-white/40 text-xs">{p.tipoIter} • {new Date(p.createdAt).toLocaleDateString('it-IT')}</p>
-                          </div>
-                          <input type="number" placeholder="UserId" id={`userId_pratica_${p.id}`} className="w-20 bg-[#1a4a2e] border border-white/20 text-white rounded px-2 py-1 text-xs" />
-                          <Button size="sm" onClick={() => {
-                            const userId = Number((document.getElementById(`userId_pratica_${p.id}`) as HTMLInputElement)?.value);
-                            if (!userId) { toast.error("Inserisci UserId"); return; }
-                            associaUserId.mutate({ installatoreId: ordine?.installatoreId, userId });
-                          }} disabled={associaUserId.isPending} className="bg-green-600 text-white hover:bg-green-600/90 text-xs px-2">{associaUserId.isPending ? "..." : "OK"}</Button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
+            {/* Info pratiche senza userId - minimale */}
+            {(pratiche as any[]).filter((p: any) => !p.userId).length > 0 && (
+              <div className="text-xs text-white/30 mb-3 flex items-center gap-2">
+                <AlertCircle className="w-3.5 h-3.5 text-white/20" />
+                {(pratiche as any[]).filter((p: any) => !p.userId).length} pratiche con userId non collegato (non impatta la funzionalità)
               </div>
             )}
 
@@ -3685,6 +3945,13 @@ export default function Admin() {
                             <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${STATO_COLORS_PRATICA[p.stato]}`}>{p.stato.replace("_", " ")}</span>
                             <span className="text-xs bg-white/10 text-white/60 px-2 py-0.5 rounded-full capitalize">{p.tipologia}</span>
                             {iterDef && <span className="text-xs bg-blue-500/10 text-blue-300 px-2 py-0.5 rounded-full">{iterDef.label}</span>}
+                            {/* Badge Pack vs Singola */}
+                            {p.tipoIter && (() => {
+                              const { isIterDaPack: iDP } = { isIterDaPack: (t: string) => ["connessione_ordinario","connessione_semplificato"].includes(t) };
+                              return iDP(p.tipoIter)
+                                ? <span className="text-xs bg-purple-500/10 text-purple-300 border border-purple-500/20 px-2 py-0.5 rounded-full font-semibold">Pack</span>
+                                : <span className="text-xs bg-[#f5c518]/10 text-[#f5c518] border border-[#f5c518]/20 px-2 py-0.5 rounded-full font-semibold">Singola</span>;
+                            })()}
                           </div>
                           <p className="text-white/60 text-sm">{inst?.ragioneSociale || "—"} · {p.comuneImpianto || "—"} ({p.provinciaImpianto || "—"})</p>
                           <p className="text-white/40 text-xs">{p.potenzaKw ? `${p.potenzaKw} kWp · ` : ""}{new Date(p.createdAt).toLocaleDateString("it-IT")}</p>
@@ -3705,7 +3972,7 @@ export default function Admin() {
                                 className="bg-[#4ade80] text-[#1a4a2e] hover:bg-[#4ade80]/90 font-bold text-xs">
                                 <CheckCircle className="w-3 h-3 mr-1" /> Completa
                               </Button>
-                              <Button size="sm" onClick={() => aggiornaPratica.mutate({ id: p.id, stato: "rifiutata" })}
+                              <Button size="sm" onClick={() => { if (confirm(`Rifiutare la pratica #${p.id} di ${p.nomeTitolare ?? "?"}?`)) aggiornaPratica.mutate({ id: p.id, stato: "rifiutata" }); }}
                                 className="bg-red-500/20 text-red-400 hover:bg-red-500/30 font-bold text-xs border border-red-500/30">
                                 <XCircle className="w-3 h-3 mr-1" /> Rifiuta
                               </Button>
@@ -3718,34 +3985,54 @@ export default function Admin() {
                             </button>
                           )}
                           <Button size="sm" variant="ghost" onClick={() => { setEditPraticaId(p.id); setEditFormPratica({ tipologia: p.tipologia, tipoIter: (p.tipoIter ?? "connessione_semplificato") as TipoIter, statoIter: p.statoIter ?? "", potenzaKw: p.potenzaKw ?? "", indirizzoImpianto: p.indirizzoImpianto ?? "", comuneImpianto: p.comuneImpianto ?? "", provinciaImpianto: p.provinciaImpianto ?? "", nomeTitolare: p.nomeTitolare ?? "", note: p.note ?? "", noteAdmin: p.noteAdmin ?? "", stato: p.stato }); }} className="text-blue-400 hover:text-blue-300"><Pencil className="w-4 h-4" /></Button>
-                          <Button size="sm" variant="ghost" onClick={() => { if (confirm("Eliminare questa pratica?")) eliminaPratica.mutate({ id: p.id }); }} className="text-red-400 hover:text-red-300"><Trash2 className="w-4 h-4" /></Button>
+                          <Button size="sm" variant="ghost" onClick={() => setDeleteModalPraticaId(p.id)} className="text-red-400 hover:text-red-300"><Trash2 className="w-4 h-4" /></Button>
                         </div>
                       </div>
 
-                      {/* AVANZA STEP ITER */}
+                      {/* AVANZA STEP ITER - visualizzazione migliorata */}
                       {expandedIterPraticaId === p.id && iterDef && (
                         <div className="px-5 pb-5 border-t border-white/5 pt-4">
-                          <p className="text-white/50 text-xs font-semibold mb-3">Avanza step iter — {iterDef.label}</p>
+                          <div className="flex items-center justify-between mb-3">
+                            <p className="text-white/50 text-xs font-semibold">Iter: {iterDef.label}</p>
+                            <p className="text-white/30 text-xs">
+                              Step {Math.max(iterDef.steps.findIndex(s => s.id === p.statoIter) + 1, 0)}/{iterDef.steps.length}
+                            </p>
+                          </div>
+                          {/* Progress bar */}
+                          <div className="w-full bg-white/10 rounded-full h-1.5 mb-4">
+                            <div
+                              className="h-1.5 rounded-full bg-gradient-to-r from-[#4ade80] to-[#f5c518] transition-all duration-500"
+                              style={{ width: `${iterDef.steps.length > 0 ? Math.max(((iterDef.steps.findIndex(s => s.id === p.statoIter) + 1) / iterDef.steps.length) * 100, 0) : 0}%` }}
+                            />
+                          </div>
                           <div className="flex flex-wrap gap-2">
-                            {iterDef.steps.map((step, idx) => (
-                              <button key={step.id}
-                                onClick={() => aggiornaPratica.mutate({ id: p.id, stato: p.stato, statoIter: step.id })}
-                                className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
-                                  p.statoIter === step.id
-                                    ? "border-[#f5c518] bg-[#f5c518]/15 text-[#f5c518]"
-                                    : idx < (iterDef.steps.findIndex(s => s.id === p.statoIter))
-                                    ? "border-[#4ade80]/30 bg-[#4ade80]/10 text-[#4ade80]"
-                                    : "border-white/15 text-white/40 hover:border-white/30 hover:text-white/60"
-                                }`}>
-                                {idx + 1}. {step.label}
-                              </button>
-                            ))}
+                            {iterDef.steps.map((step, idx) => {
+                              const currentIdx = iterDef.steps.findIndex(s => s.id === p.statoIter);
+                              const isActive = p.statoIter === step.id;
+                              const isDone = idx < currentIdx;
+                              return (
+                                <button key={step.id}
+                                  onClick={() => aggiornaPratica.mutate({ id: p.id, stato: p.stato, statoIter: step.id })}
+                                  title={step.label}
+                                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all flex items-center gap-1.5 ${
+                                    isActive
+                                      ? "border-[#f5c518] bg-[#f5c518]/15 text-[#f5c518] shadow-sm shadow-[#f5c518]/20"
+                                      : isDone
+                                      ? "border-[#4ade80]/30 bg-[#4ade80]/10 text-[#4ade80]"
+                                      : "border-white/10 text-white/35 hover:border-white/30 hover:text-white/60"
+                                  }`}>
+                                  <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-black ${
+                                    isActive ? "bg-[#f5c518] text-[#1a4a2e]" : isDone ? "bg-[#4ade80] text-[#1a4a2e]" : "bg-white/10 text-white/40"
+                                  }`}>{isDone ? "✓" : idx + 1}</span>
+                                  {step.label}
+                                </button>
+                              );
+                            })}
                           </div>
                         </div>
                       )}
 
                       {/* DOCUMENTI CARICATI */}
-                      {expandedIterPraticaId === p.id && expandedDocPraticaId !== p.id && (() => { setExpandedDocPraticaId(p.id); return null; })()}
                       {expandedIterPraticaId === p.id && (
                         <div className="px-5 pb-5 border-t border-white/5 pt-4">
                           <div className="flex items-center justify-between mb-3">
@@ -3880,17 +4167,17 @@ export default function Admin() {
                 <Gift className="w-5 h-5 text-purple-400" />
                 <h3 className="text-xl font-black text-purple-300">Assegnazione Rapida Pacchetti</h3>
               </div>
-              <div className="grid sm:grid-cols-3 gap-3">
+              <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
                 <div>
                   <label className="text-white/60 text-xs mb-1 block">Installatore *</label>
-                  <select id="quickAssignInstallatore" className="w-full bg-[#1a4a2e] border border-white/20 text-white rounded-lg px-3 py-2 text-sm">
+                  <select value={quickAssignInstId} onChange={e => setQuickAssignInstId(e.target.value)} className="w-full bg-[#1a4a2e] border border-white/20 text-white rounded-lg px-3 py-2 text-sm">
                     <option value="">Seleziona installatore...</option>
                     {(installatoriDropdown as any[]).map((row: any) => { const inst = row.installatore ?? row; return <option key={inst.id} value={String(inst.id)}>{inst.ragioneSociale || inst.nome}</option>; })}
                   </select>
                 </div>
                 <div>
                   <label className="text-white/60 text-xs mb-1 block">Pacchetto *</label>
-                  <select id="quickAssignPack" className="w-full bg-[#1a4a2e] border border-white/20 text-white rounded-lg px-3 py-2 text-sm">
+                  <select value={quickAssignPackId} onChange={e => setQuickAssignPackId(e.target.value)} className="w-full bg-[#1a4a2e] border border-white/20 text-white rounded-lg px-3 py-2 text-sm">
                     <option value="">Seleziona pacchetto...</option>
                     {packConfigList.length > 0 ? (
                       <optgroup label="── Pack Standard ──">
@@ -3915,45 +4202,84 @@ export default function Admin() {
                     )}
                   </select>
                 </div>
-                <div className="flex items-end">
-                  <Button
-                    onClick={() => {
-                      const instId = (document.getElementById("quickAssignInstallatore") as HTMLSelectElement)?.value;
-                      const packId = (document.getElementById("quickAssignPack") as HTMLSelectElement)?.value;
-                      if (!instId || !packId) { toast.error("Seleziona installatore e pacchetto"); return; }
-                      
-                      const isPromo = packId.startsWith("promo_");
-                      const promoSelezionata = isPromo ? promoList.find((p: any) => `promo_${p.id}` === packId) : null;
-                      const packData: Record<string, any> = {
-                        pack1: { importo: 2000, res: 16, bus: 5 },
-                        pack2: { importo: 3150, res: 30, bus: 9 },
-                        pack3: { importo: 5100, res: 60, bus: 20 },
-                      };
-                      const configPack = !isPromo ? packConfigList.find((p: any) => p.slug === packId) : null;
-                      const pack = isPromo && promoSelezionata
-                        ? { importo: Number(promoSelezionata.prezzo), res: 0, bus: 0, nome: `🏷 ${promoSelezionata.titolo}` }
-                        : packData[packId] || (configPack ? { importo: Number(configPack.prezzo), res: configPack.praticheRes, bus: configPack.praticheBus, nome: configPack.nome } : null);
-                      
-                      if (pack) {
+                <div>
+                  <label className="text-white/60 text-xs mb-1 block">Prezzo Manuale (€) <span className="text-white/30">opz.</span></label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="50"
+                    placeholder="Es. 1800 (sovrascrive default)"
+                    value={quickAssignPrezzoManuale}
+                    onChange={e => setQuickAssignPrezzoManuale(e.target.value)}
+                    className="w-full bg-[#1a4a2e] border border-white/20 text-white rounded-lg px-3 py-2 text-sm placeholder-white/20"
+                  />
+                </div>
+                <div>
+                  <label className="text-white/60 text-xs mb-1 block">Note</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      placeholder="Note (opzionale)"
+                      value={quickAssignNote}
+                      onChange={e => setQuickAssignNote(e.target.value)}
+                      className="flex-1 bg-[#1a4a2e] border border-white/20 text-white rounded-lg px-3 py-2 text-sm"
+                    />
+                    <Button
+                      onClick={() => {
+                        const instId = quickAssignInstId;
+                        const packId = quickAssignPackId;
+                        if (!instId || !packId) { toast.error("Seleziona installatore e pacchetto"); return; }
+                        const isPromo = packId.startsWith("promo_");
+                        const promoSelezionata = isPromo ? promoList.find((p: any) => `promo_${p.id}` === packId) : null;
+                        const packData: Record<string, any> = {
+                          pack1: { importo: 2000, res: 16, bus: 5 },
+                          pack2: { importo: 3150, res: 30, bus: 9 },
+                          pack3: { importo: 5100, res: 60, bus: 20 },
+                        };
+                        const configPack = !isPromo ? packConfigList.find((p: any) => p.slug === packId) : null;
+                        const defaultPack = isPromo && promoSelezionata
+                          ? { importo: Number(promoSelezionata.prezzo), res: 0, bus: 0, nome: `🏷 ${promoSelezionata.titolo}` }
+                          : packData[packId] || (configPack ? { importo: Number(configPack.prezzo), res: configPack.praticheRes, bus: configPack.praticheBus, nome: configPack.nome } : null);
+                        if (!defaultPack) { toast.error("Pacchetto non trovato"); return; }
+                        const importoFinale = quickAssignPrezzoManuale ? Number(quickAssignPrezzoManuale) : defaultPack.importo;
                         assegnaPackaggio.mutate({
                           installatoreId: Number(instId),
                           packId: isPromo ? "custom" : packId as any,
-                          nomePacchetto: pack.nome || configPack?.nome,
-                          importo: pack.importo,
-                          pratiche_incluse_residenziali: pack.res,
-                          pratiche_incluse_business: pack.bus,
-                          note: isPromo ? `Promo assegnata: ${promoSelezionata?.titolo}` : "Assegnato da Gestione Pack",
+                          nomePacchetto: defaultPack.nome || configPack?.nome,
+                          importo: importoFinale,
+                          pratiche_incluse_residenziali: defaultPack.res,
+                          pratiche_incluse_business: defaultPack.bus,
+                          note: quickAssignNote || (isPromo ? `Promo assegnata: ${promoSelezionata?.titolo}` : "Assegnato da Gestione Pack"),
                         });
-                        (document.getElementById("quickAssignInstallatore") as HTMLSelectElement).value = "";
-                        (document.getElementById("quickAssignPack") as HTMLSelectElement).value = "";
-                      }
-                    }}
-                    disabled={assegnaPackaggio.isPending}
-                    className="w-full bg-purple-400 text-[#1a4a2e] hover:bg-purple-400/90 font-bold">
-                    {assegnaPackaggio.isPending ? "Assegnazione..." : "Assegna"}
-                  </Button>
+                      }}
+                      disabled={assegnaPackaggio.isPending}
+                      className="bg-purple-400 text-[#1a4a2e] hover:bg-purple-400/90 font-bold whitespace-nowrap">
+                      {assegnaPackaggio.isPending ? "..." : "Assegna"}
+                    </Button>
+                  </div>
                 </div>
               </div>
+              {/* Anteprima prezzo */}
+              {quickAssignPackId && (
+                <div className="mt-3 p-3 bg-black/20 rounded-lg text-xs text-white/60">
+                  {(() => {
+                    const isPromo = quickAssignPackId.startsWith("promo_");
+                    const promoSel = isPromo ? promoList.find((p: any) => `promo_${p.id}` === quickAssignPackId) : null;
+                    const configPack = !isPromo ? packConfigList.find((p: any) => p.slug === quickAssignPackId) : null;
+                    const packData: Record<string, any> = { pack1: { importo: 2000, res: 16, bus: 5 }, pack2: { importo: 3150, res: 30, bus: 9 }, pack3: { importo: 5100, res: 60, bus: 20 } };
+                    const defaultPack = isPromo && promoSel ? { importo: Number(promoSel.prezzo), res: 0, bus: 0 } : packData[quickAssignPackId] || (configPack ? { importo: Number(configPack.prezzo), res: configPack.praticheRes, bus: configPack.praticheBus } : null);
+                    if (!defaultPack) return null;
+                    const importoMostrato = quickAssignPrezzoManuale ? Number(quickAssignPrezzoManuale) : defaultPack.importo;
+                    return (
+                      <span>
+                        Prezzo: <strong className="text-[#f5c518]">€{importoMostrato.toLocaleString("it-IT")}</strong>
+                        {quickAssignPrezzoManuale && <span className="text-purple-300 ml-2">(prezzo manuale)</span>}
+                        {!isPromo && <span className="ml-3">Pratiche: <strong className="text-[#4ade80]">{defaultPack.res} res</strong> + <strong className="text-blue-400">{defaultPack.bus} bus</strong></span>}
+                      </span>
+                    );
+                  })()}
+                </div>
+              )}
             </div>
             
             {/* ── ASSEGNAZIONE BULK A PIÙ INSTALLATORI ── */}
@@ -4423,7 +4749,7 @@ export default function Admin() {
                 <div>
                   <p className="text-white/60 text-sm font-semibold mb-2">Frequenza</p>
                   <div className="flex gap-2">
-                    {(["giornaliero", "settimanale", "mensile"] as const).map((f) => (
+                    {(["orario", "giornaliero", "settimanale", "mensile"] as const).map((f) => (
                       <button key={f} onClick={() => setFreqSelezionata(f)}
                         className={`flex-1 rounded-xl border py-2 text-xs font-bold capitalize transition-all ${
                           freqSelezionata === f ? "border-[#f5c518] bg-[#f5c518]/10 text-[#f5c518]" : "border-white/15 text-white/50 hover:border-white/30 hover:text-white"
@@ -4535,9 +4861,27 @@ export default function Admin() {
                     reader.readAsText(file);
                   }} className="block w-full text-sm text-white/60 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-bold file:bg-[#f5c518] file:text-[#1a4a2e] hover:file:bg-[#f5c518]/90 cursor-pointer" />
                 </label>
-                {backupFileContent && (
-                  <p className="text-[#4ade80] text-sm">File caricato. Pronto per il ripristino.</p>
-                )}
+                {backupFileContent && (() => {
+                  try {
+                    const parsed = JSON.parse(backupFileContent);
+                    const instCount = parsed.installatori?.length ?? 0;
+                    const ordCount = parsed.ordini?.length ?? 0;
+                    const pratCount = parsed.pratiche?.length ?? 0;
+                    return (
+                      <div className="bg-[#4ade80]/10 border border-[#4ade80]/30 rounded-xl p-3 space-y-1">
+                        <p className="text-[#4ade80] text-sm font-bold">Backup valido — Versione {parsed.versione || "1.0"}</p>
+                        <p className="text-white/50 text-xs">Data: {parsed.dataEsportazione ? new Date(parsed.dataEsportazione).toLocaleString("it-IT") : "–"}</p>
+                        <div className="flex gap-4 text-xs text-white/60 mt-2">
+                          <span>{instCount} installatori</span>
+                          <span>{ordCount} ordini</span>
+                          <span>{pratCount} pratiche</span>
+                        </div>
+                      </div>
+                    );
+                  } catch {
+                    return <p className="text-red-400 text-sm">File non valido — non è un JSON leggibile.</p>;
+                  }
+                })()}
                 {ripristinoMsg && (
                   <div className="bg-[#4ade80]/10 border border-[#4ade80]/30 rounded-xl p-3">
                     <p className="text-[#4ade80] text-sm font-semibold">{ripristinoMsg}</p>
@@ -4744,6 +5088,11 @@ export default function Admin() {
         {tab === "bollette" && (
           <BolletteDebugTab />
         )}
+
+        {/* Tab Promo */}
+        {tab === "promo" && (
+          <PromoAdminTab installatoriDropdown={installatoriDropdown} />
+        )}
       </div>
       {/* MODAL LISTINO PERSONALIZZATO */}
       {showListinoModal && expandedInstId !== null && (
@@ -4828,7 +5177,7 @@ export default function Admin() {
       {/* MODAL PACCHETTI */}
       {showPackModal !== null && (({ packConfigModal: packConfigModalParam }) => {
         // Trova l'installatore corrente per pre-compilare i campi
-        const instCorrente = installatori.find(({ installatore: i }) => i.id === showPackModal)?.installatore;
+        const instCorrente = installatoriDropdown.find(({ installatore: i }: any) => i.id === showPackModal)?.installatore;
         const nomeInst = instCorrente?.ragioneSociale ?? "";
         const emailInst = instCorrente?.email ?? "";
         const isCustom = packSelezionato === "custom";
