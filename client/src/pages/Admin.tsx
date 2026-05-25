@@ -2058,8 +2058,8 @@ export default function Admin() {
   // Promo per installatore specifico
   const { data: promoInstList = [], refetch: refetchPromoInst } = trpc.promo.listaAdmin.useQuery(undefined, { enabled: isAdmin && expandedInstId !== null });
   const { data: documentiPraticaAdmin = [] } = trpc.pratiche.documenti.useQuery(
-    { praticaId: expandedIterPraticaId! },
-    { enabled: expandedIterPraticaId !== null && isAdmin }
+    { praticaId: expandedDocPraticaId! },
+    { enabled: expandedDocPraticaId !== null && isAdmin }
   );
   const { data: corsaData, isLoading: corsaLoading } = trpc.installatori.classifica.useQuery(undefined, { enabled: isAdmin && tab === "corsa", refetchInterval: tab === "corsa" ? 60000 : false });
   const { data: corsaTargetRaw, refetch: refetchCorsaTarget } = trpc.impostazioni.get.useQuery({ chiave: "corsa_target" }, { enabled: isAdmin && tab === "corsa" });
@@ -2367,6 +2367,7 @@ export default function Admin() {
   const [showCreaPratica, setShowCreaPratica] = useState(false);
   const [editPraticaId, setEditPraticaId] = useState<number | null>(null);
   const [expandedIterPraticaId, setExpandedIterPraticaId] = useState<number | null>(null);
+  useEffect(() => { setExpandedDocPraticaId(expandedIterPraticaId); }, [expandedIterPraticaId]);
   const [filtroIter, setFiltroIter] = useState<string>("tutti");
   const [formPratica, setFormPratica] = useState({ installatoreId: "", ordineid: "", tipologia: "residenziale" as "residenziale" | "business", tipoIter: "connessione_semplificato" as TipoIter, potenzaKw: "", indirizzoImpianto: "", comuneImpianto: "", provinciaImpianto: "", nomeTitolare: "", note: "", scalaPack: true });
   const [editFormPratica, setEditFormPratica] = useState({ tipologia: "residenziale" as "residenziale" | "business", tipoIter: "connessione_semplificato" as TipoIter, statoIter: "", potenzaKw: "", indirizzoImpianto: "", comuneImpianto: "", provinciaImpianto: "", nomeTitolare: "", note: "", noteAdmin: "", stato: "inviata" as any });
