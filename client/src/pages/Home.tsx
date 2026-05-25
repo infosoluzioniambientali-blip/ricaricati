@@ -249,7 +249,7 @@ export default function Home() {
   const [, setLocation] = useLocation();
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, logout } = useAuth();
   const utils = trpc.useUtils();
   const loginMutation = trpc.auth.login.useMutation({
     onSuccess: () => {
@@ -303,6 +303,7 @@ export default function Home() {
         isSoloSingole={isSoloSingole}
         isAuthenticated={isAuthenticated}
         onLoginClick={() => setShowLoginModal(true)}
+        onLogout={logout}
         onShowMobileMenu={setShowMobileMenu}
         showMobileMenu={showMobileMenu}
         packs={PACKS_FALLBACK}
