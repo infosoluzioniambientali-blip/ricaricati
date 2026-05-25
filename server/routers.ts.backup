@@ -1,0 +1,1266 @@
+import { z } from "zod";
+import { TRPCError } from "@trpc/server";
+import { COOKIE_NAME } from "@shared/const";
+import { getSessionCookieOptions } from "./_core/cookies";
+import { systemRouter } from "./_core/systemRouter";
+import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
+import { notifyOwner } from "./_core/notification";
+import { makeRequest } from "./_core/map";
+import { ITER_DEFINIZIONI, type TipoIter } from "@shared/iter";
+import {
+  upsertUser,
+  getUserByOpenId,
+  getInstallatoreByUserId,
+  getInstallatoreById,
+  createInstallatore,
+  createInstallatoreAdmin,
+  updateInstallatore,
+  updateInstallatoreStato,
+  deleteInstallatore,
+  getAllInstallatori,
+  getClassificaInstallatori,
+  getTotaleFatturato,
+  createOrdine,
+  hasPackAttivo,
+  createOrdineAdmin,
+  getAllOrdini,
+  getOrdiniByUserId,
+  updateOrdineStato,
+  updateOrdine,
+  deleteOrdine,
+  createPratica,
+  createPraticaAdmin,
+  getPraticheByInstallatoreId,
+  getPraticheByInstallatoreIdAdmin,
+  getAllPratiche,
+  updatePraticaStato,
+  updatePratica,
+  deletePratica,
+  createDocumento,
+  getDocumentiByPraticaId,
+  deleteDocumento,
+  getRicaricheByInstallatoreId,
+  getStatisticheAdmin,
+  getAllDocumenti,
+  scalaPraticaDaOrdine,
+  getPackRiepilogo,
+  PRATICHE_PER_PACK,
+  PRATICHE_RES_PER_PACK,
+  PRATICHE_BUS_PER_PACK,
+  getBackupConfig,
+  upsertBackupConfig,
+  createBackupStorico,
+  getBackupStorico,
+  getListinoPersonalizzatoByInstallatore,
+  upsertListinoPersonalizzato,
+  deleteListinoPersonalizzato,
+  getOrdiniSingoliByInstallatore,
+  getPackAcquistatiByInstallatore,
+  getProspectInstallatori,
+  createProspectInstallatore,
+  updateProspectInstallatore,
+  deleteProspectInstallatore,
+  getImmobiliFotovoltaico,
+  createImmobileFotovoltaico,
+  updateImmobileFotovoltaico,
+  deleteImmobileFotovoltaico,
+  bulkCreateProspectInstallatori,
+  exportProspectInstallatori,
+  aggiornaStatoContatto,
+  createPec,
+  getPecByInstallatoreId,
+  updatePec,
+  deletePec,
+} from "./db";
+import { storagePut, storageGetSignedUrl } from "./storage";
+import { eq } from "drizzle-orm";
+
+// Importa getPraticheByInstallatoreId se non è già importato
+const getPraticheByInstallatoreIdFn = getPraticheByInstallatoreId;
+
+// Admin guard middleware
+const adminProcedure = protectedProcedure.use(({ ctx, next }) => {
+  if (ctx.user.role !== "admin") {
+    throw new TRPCError({ code: "FORBIDDEN", message: "Accesso riservato agli amministratori" });
+  }
+  return next({ ctx });
+});
+
+export const appRouter = router({
+  system: systemRouter,
+
+  auth: router({
+    me: publicProcedure.query((opts) => opts.ctx.user),
+    logout: publicProcedure.mutation(({ ctx }) => {
+      const cookieOptions = getSessionCookieOptions(ctx.req);
+      ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
+      return { success: true } as const;
+    }),
+  }),
+
+  // ─── INSTALLATORI ──────────────────────────────────────────────────────────
+  installatori: router({
+    mio: protectedProcedure.query(async ({ ctx }) => {
+      const installatore = await getInstallatoreByUserId(ctx.user.id);
+      return installatore || null;
+    }),
+    // Installatore: ottieni il proprio listino personalizzato (se esiste)
+    mioListino: protectedProcedure.query(async ({ ctx }) => {
+      const installatore = await getInstallatoreByUserId(ctx.user.id);
+      if (!installatore) return null;
+      return getListinoPersonalizzatoByInstallatore(installatore.id);
+    }),
+
+    registra: protectedProcedure
+      .input(
+        z.object({
+          ragioneSociale: z.string().min(2),
+          partitaIva: z.string().optional(),
+          telefono: z.string().optional(),
+          citta: z.string().optional(),
+          provincia: z.string().optional(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        const esistente = await getInstallatoreByUserId(ctx.user.id);
+        if (esistente) {
+          throw new TRPCError({ code: "CONFLICT", message: "Profilo installatore già esistente" });
+        }
+        const installatore = await createInstallatore({
+          userId: ctx.user.id,
+          ragioneSociale: input.ragioneSociale,
+          partitaIva: input.partitaIva,
+          telefono: input.telefono,
+          citta: input.citta,
+          provincia: input.provincia,
+          stato: "in_attesa",
+          saldoPratiche: 0,
+          saldoBusiness: 0,
+          totaleFatturato: "0",
+        });
+        await notifyOwner({
+          title: "Nuova registrazione installatore",
+          content: `Nuovo installatore registrato: ${input.ragioneSociale} (${ctx.user.email ?? ctx.user.name}). In attesa di approvazione.`,
+        });
+        return installatore;
+      }),
+
+    classifica: publicProcedure.query(async () => {
+      const [classifica, totale] = await Promise.all([
+        getClassificaInstallatori(),
+        getTotaleFatturato(),
+      ]);
+      return { classifica, totale };
+    }),
+
+    // Admin: lista tutti
+    lista: adminProcedure.query(async () => {
+      return getAllInstallatori();
+    }),
+
+    // Admin: approva/rifiuta
+    aggiornaStato: adminProcedure
+      .input(z.object({ id: z.number(), stato: z.enum(["approvato", "rifiutato", "in_attesa"]) }))
+      .mutation(async ({ input }) => {
+        await updateInstallatoreStato(input.id, input.stato);
+        return { success: true };
+      }),
+
+    // Admin: crea installatore manualmente
+    creaAdmin: adminProcedure
+      .input(
+        z.object({
+          userId: z.number().optional(),
+          ragioneSociale: z.string().min(2),
+          email: z.string().email().optional(),
+          sito: z.string().optional(),
+          indirizzo: z.string().optional(),
+          partitaIva: z.string().optional(),
+          telefono: z.string().optional(),
+          citta: z.string().optional(),
+          provincia: z.string().optional(),
+          regione: z.string().optional(),
+          settore: z.string().optional(),
+          specializzazioni: z.string().optional(),
+          note: z.string().optional(),
+          stato: z.enum(["in_attesa", "approvato", "rifiutato"]).default("approvato"),
+        })
+      )
+      .mutation(async ({ input }) => {
+        return createInstallatoreAdmin({
+          userId: input.userId ?? 0,
+          ragioneSociale: input.ragioneSociale,
+          email: input.email,
+          sito: input.sito,
+          indirizzo: input.indirizzo,
+          partitaIva: input.partitaIva,
+          telefono: input.telefono,
+          citta: input.citta,
+          provincia: input.provincia,
+          regione: input.regione,
+          settore: input.settore,
+          specializzazioni: input.specializzazioni,
+          note: input.note,
+          stato: input.stato,
+          saldoPratiche: 0,
+          saldoBusiness: 0,
+          totaleFatturato: "0",
+        });
+      }),
+
+    // Admin: modifica installatore
+    modificaAdmin: adminProcedure
+      .input(
+        z.object({
+          id: z.number(),
+          ragioneSociale: z.string().min(2).optional(),
+          partitaIva: z.string().optional(),
+          telefono: z.string().optional(),
+          email: z.string().email().optional(),
+          sito: z.string().optional(),
+          indirizzo: z.string().optional(),
+          citta: z.string().optional(),
+          provincia: z.string().optional(),
+          regione: z.string().optional(),
+          settore: z.string().optional(),
+          specializzazioni: z.string().optional(),
+          note: z.string().optional(),
+          stato: z.enum(["in_attesa", "approvato", "rifiutato"]).optional(),
+          saldoPratiche: z.number().optional(),
+          totaleFatturato: z.string().optional(),
+          tipoInterfaccia: z.enum(["pack_e_singole", "solo_singole"]).optional(),
+        })
+      )
+      .mutation(async ({ input }) => {
+        const { id, ...data } = input;
+        await updateInstallatore(id, data);
+        return { success: true };
+      }),
+
+    // Admin: elimina installatore
+    eliminaAdmin: adminProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        await deleteInstallatore(input.id);
+        return { success: true };
+      }),
+
+    // Admin: pratiche di un installatore specifico
+    praticheInstallatore: adminProcedure
+      .input(z.object({ installatoreId: z.number() }))
+      .query(async ({ input }) => {
+        return getPraticheByInstallatoreIdAdmin(input.installatoreId);
+      }),
+
+    // Admin: aggiorna tipo interfaccia installatore
+    aggiornaTipoInterfaccia: adminProcedure
+      .input(z.object({ id: z.number(), tipoInterfaccia: z.enum(["pack_e_singole", "solo_singole"]) }))
+      .mutation(async ({ input }) => {
+        await updateInstallatore(input.id, { tipoInterfaccia: input.tipoInterfaccia });
+        return { success: true };
+      }),
+
+    // Admin: pack acquistati da un installatore
+    packAcquistati: adminProcedure
+      .input(z.object({ installatoreId: z.number() }))
+      .query(async ({ input }) => {
+        return getPackAcquistatiByInstallatore(input.installatoreId);
+      }),
+
+    // Admin: ordini singoli di un installatore
+    ordiniSingoli: adminProcedure
+      .input(z.object({ installatoreId: z.number() }))
+      .query(async ({ input }) => {
+        return getOrdiniSingoliByInstallatore(input.installatoreId);
+      }),
+
+    // Admin: upsert listino personalizzato
+    upsertListino: adminProcedure
+      .input(z.object({
+        installatoreId: z.number(),
+        nomeListino: z.string().min(1),
+        prezzi: z.record(z.string(), z.object({ prezzo: z.number(), note: z.string().optional() })),
+      }))
+      .mutation(async ({ input }) => {
+        const id = await upsertListinoPersonalizzato(input.installatoreId, input.nomeListino, input.prezzi as Record<string, { prezzo: number; note?: string }>);
+        return { success: true, id };
+      }),
+
+    // Admin: ottieni listino personalizzato
+    getListino: adminProcedure
+      .input(z.object({ installatoreId: z.number() }))
+      .query(async ({ input }) => {
+        const lp = await getListinoPersonalizzatoByInstallatore(input.installatoreId);
+        if (!lp) return null;
+        return { ...lp, prezzi: JSON.parse(lp.prezzi || "{}") as Record<string, { prezzo: number; note?: string }> };
+      }),
+
+    // Admin: elimina listino personalizzato
+    eliminaListino: adminProcedure
+      .input(z.object({ installatoreId: z.number() }))
+      .mutation(async ({ input }) => {
+        await deleteListinoPersonalizzato(input.installatoreId);
+        return { success: true };
+      }),
+
+    // Admin: crea PEC per installatore
+    creaPec: adminProcedure
+      .input(z.object({
+        installatoreId: z.number(),
+        email: z.string().email(),
+      }))
+      .mutation(async ({ input }) => {
+        return createPec({
+          installatoreId: input.installatoreId,
+          email: input.email,
+          verificato: false,
+        });
+      }),
+
+    // Admin: ottieni PEC di un installatore
+    getPec: adminProcedure
+      .input(z.object({ installatoreId: z.number() }))
+      .query(async ({ input }) => {
+        return getPecByInstallatoreId(input.installatoreId);
+      }),
+
+    // Admin: aggiorna PEC
+    aggiornaPec: adminProcedure
+      .input(z.object({
+        id: z.number(),
+        email: z.string().email().optional(),
+        verificato: z.boolean().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const { id, ...data } = input;
+        await updatePec(id, data);
+        return { success: true };
+      }),
+
+    // Admin: elimina PEC
+    eliminaPec: adminProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        await deletePec(input.id);
+        return { success: true };
+      }),
+  }),
+
+  // ─── ORDINI ────────────────────────────────────────────────────────────────
+  ordini: router({
+    crea: protectedProcedure
+      .input(
+        z.object({
+          packId: z.enum(["pack1", "pack2", "pack3"]),
+          metodoPagamento: z.enum(["paypal", "bonifico"]),
+          nomeAcquirente: z.string().min(2),
+          emailAcquirente: z.string().email(),
+          telefonoAcquirente: z.string().optional(),
+          ragioneSocialeAcquirente: z.string().optional(),
+          note: z.string().optional(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        const prezzi = { pack1: "2000.00", pack2: "3150.00", pack3: "5100.00" };
+        const pratiche_incluse = PRATICHE_PER_PACK[input.packId] ?? 0;
+        const pratiche_incluse_residenziali = PRATICHE_RES_PER_PACK[input.packId] ?? 0;
+        const pratiche_incluse_business = PRATICHE_BUS_PER_PACK[input.packId] ?? 0;
+        // Collega automaticamente l'installatore autenticato
+        const installatore = await getInstallatoreByUserId(ctx.user.id);
+        const ordine = await createOrdine({
+          userId: ctx.user.id,
+          installatoreId: installatore?.id,
+          packId: input.packId,
+          importo: prezzi[input.packId],
+          metodoPagamento: input.metodoPagamento,
+          nomeAcquirente: input.nomeAcquirente,
+          emailAcquirente: input.emailAcquirente,
+          telefonoAcquirente: input.telefonoAcquirente,
+          ragioneSocialeAcquirente: input.ragioneSocialeAcquirente,
+          note: input.note,
+          stato: "in_attesa",
+          pratiche_incluse,
+          pratiche_incluse_residenziali,
+          pratiche_incluse_business,
+          pratiche_usate: 0,
+        });
+        const nomiPack = { pack1: "Pack 1 — €2.000", pack2: "Pack 2 — €3.150", pack3: "Pack 3 — €5.100" };
+        await notifyOwner({
+          title: "Nuovo ordine ricevuto",
+          content: `Nuovo ordine: ${nomiPack[input.packId]} da ${input.nomeAcquirente} (${input.emailAcquirente}). Metodo: ${input.metodoPagamento === "paypal" ? "PayPal" : "Bonifico bancario"}.`,
+        });
+        return ordine;
+      }),
+
+    miei: protectedProcedure.query(async ({ ctx }) => {
+      const ordini = await getOrdiniByUserId(ctx.user.id);
+      // Filtra solo gli ordini pagati
+      return ordini.filter((o: any) => o.stato === "pagato");
+    }),
+
+    tutti: adminProcedure.query(async () => {
+      return getAllOrdini();
+    }),
+
+    aggiornaStato: adminProcedure
+      .input(z.object({ id: z.number(), stato: z.enum(["in_attesa", "pagato", "annullato"]) }))
+      .mutation(async ({ input }) => {
+        await updateOrdineStato(input.id, input.stato);
+        return { success: true };
+      }),
+
+    // Admin: crea ordine manualmente
+    creaAdmin: adminProcedure
+      .input(
+        z.object({
+          installatoreId: z.number().optional(),
+          packId: z.enum(["pack1", "pack2", "pack3"]),
+          metodoPagamento: z.enum(["paypal", "bonifico"]),
+          nomeAcquirente: z.string().min(2),
+          emailAcquirente: z.string().email(),
+          telefonoAcquirente: z.string().optional(),
+          ragioneSocialeAcquirente: z.string().optional(),
+          note: z.string().optional(),
+          stato: z.enum(["in_attesa", "pagato", "annullato"]).default("pagato"),
+          pratiche_incluse: z.number().optional(),
+        })
+      )
+      .mutation(async ({ input }) => {
+        const prezzi = { pack1: "2000.00", pack2: "3150.00", pack3: "5100.00" };
+        const pratiche_incluse = input.pratiche_incluse ?? PRATICHE_PER_PACK[input.packId] ?? 0;
+        const pratiche_incluse_residenziali = PRATICHE_RES_PER_PACK[input.packId] ?? 0;
+        const pratiche_incluse_business = PRATICHE_BUS_PER_PACK[input.packId] ?? 0;
+        return createOrdineAdmin({
+          userId: 0,
+          installatoreId: input.installatoreId,
+          packId: input.packId,
+          importo: prezzi[input.packId],
+          metodoPagamento: input.metodoPagamento,
+          nomeAcquirente: input.nomeAcquirente,
+          emailAcquirente: input.emailAcquirente,
+          telefonoAcquirente: input.telefonoAcquirente,
+          ragioneSocialeAcquirente: input.ragioneSocialeAcquirente,
+          note: input.note,
+          stato: input.stato,
+          pratiche_incluse,
+          pratiche_incluse_residenziali,
+          pratiche_incluse_business,
+          pratiche_usate: 0,
+        });
+      }),
+
+    // Admin: modifica ordine
+    modificaAdmin: adminProcedure
+      .input(
+        z.object({
+          id: z.number(),
+          stato: z.enum(["in_attesa", "pagato", "annullato"]).optional(),
+          note: z.string().optional(),
+          pratiche_incluse: z.number().optional(),
+          pratiche_usate: z.number().optional(),
+        })
+      )
+      .mutation(async ({ input }) => {
+        const { id, ...data } = input;
+        await updateOrdine(id, data);
+        return { success: true };
+      }),
+
+    // Admin: elimina ordine
+    eliminaAdmin: adminProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        await deleteOrdine(input.id);
+        return { success: true };
+      }),
+
+    // Richiesta pratiche singole (senza pack)
+    creaOrdineSingolo: publicProcedure
+      .input(z.object({
+        descrizione: z.string().min(5),
+        fascia: z.enum(["prezzoStandard", "prezzoForniture", "prezzoPremium"]),
+        importoTotale: z.number().min(0).default(0),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const nomeAcquirente = ctx.user?.name ?? ctx.user?.email ?? "Anonimo";
+        const emailAcquirente = ctx.user?.email ?? "noreply@ricaricati.it";
+        const ordine = await createOrdine({
+          userId: ctx.user?.id ?? 0,
+          installatoreId: ctx.user ? (await getInstallatoreByUserId(ctx.user.id))?.id : undefined,
+          packId: "singolo",
+          importo: input.importoTotale.toFixed(2),
+          metodoPagamento: "bonifico",
+          nomeAcquirente,
+          emailAcquirente,
+          note: `[PRATICHE SINGOLE - Fascia: ${input.fascia}]\n${input.descrizione}`,
+          stato: "in_attesa",
+          pratiche_incluse: 0,
+          pratiche_usate: 0,
+        });
+        await notifyOwner({
+          title: "Nuova richiesta pratiche singole",
+          content: `Richiesta da ${nomeAcquirente} (${emailAcquirente})\nFascia: ${input.fascia} — Totale: €${input.importoTotale.toFixed(2)}\n\n${input.descrizione}`,
+        });
+        return ordine;
+      }),
+  }),
+
+  // ─── PRATICHE ──────────────────────────────────────────────────────────────
+  pratiche: router({
+    crea: protectedProcedure
+      .input(
+        z.object({
+          tipologia: z.enum(["residenziale", "business"]),
+          tipoIter: z.enum([
+            "connessione_ordinario",
+            "connessione_semplificato",
+            "gse",
+            "terna_gaudi",
+            "enea_conto_termico",
+            "dogane_officina_elettrica",
+            "dogane_dichiarazione_consumo",
+            "arera",
+            "distribuzione",
+          ]).default("connessione_semplificato"),
+          potenzaKw: z.string().optional(),
+          indirizzoImpianto: z.string().optional(),
+          comuneImpianto: z.string().optional(),
+          provinciaImpianto: z.string().optional(),
+          nomeTitolare: z.string().optional(),
+          note: z.string().optional(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        const installatore = await getInstallatoreByUserId(ctx.user.id);
+        if (!installatore) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Devi registrarti come installatore" });
+        }
+        if (installatore.stato !== "approvato") {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Il tuo account è in attesa di approvazione" });
+        }
+        // Validazione: l'installatore deve avere acquistato un pack o una pratica singola
+        const ordini = await getOrdiniByUserId(ctx.user.id);
+        const ordiniPagati = ordini.filter((o: any) => o.stato === "pagato");
+        if (ordiniPagati.length === 0) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Devi acquistare un pack o una pratica singola prima di creare una pratica" });
+        }
+        // Verifica che abbia un pack attivo (non solo pratiche singole)
+        const hasPack = await hasPackAttivo(installatore.id);
+        if (!hasPack) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Devi acquistare un pack per creare pratiche" });
+        }
+        const pratica = await createPratica({
+          installatoreId: installatore.id,
+          userId: ctx.user.id,
+          tipologia: input.tipologia,
+          tipoIter: input.tipoIter,
+          statoIter: "documenti_raccolti",
+          potenzaKw: input.potenzaKw,
+          indirizzoImpianto: input.indirizzoImpianto,
+          comuneImpianto: input.comuneImpianto,
+          provinciaImpianto: input.provinciaImpianto,
+          nomeTitolare: input.nomeTitolare,
+          note: input.note,
+          stato: "bozza",
+        });
+         // Scala automaticamente dal pack attivo (distingue residenziale/business)
+        await scalaPraticaDaOrdine(installatore.id, input.tipologia);
+        return pratica;
+      }),
+    mie: protectedProcedure.query(async ({ ctx }) => {
+      const installatore = await getInstallatoreByUserId(ctx.user.id);
+      if (!installatore) return [];
+      return getPraticheByInstallatoreId(installatore.id);
+    }),
+
+    documenti: protectedProcedure
+      .input(z.object({ praticaId: z.number() }))
+      .query(async ({ input }) => {
+        return getDocumentiByPraticaId(input.praticaId);
+      }),
+    getDocumentoDownloadUrl: protectedProcedure
+      .input(z.object({ documentoId: z.number() }))
+      .query(async ({ ctx, input }) => {
+        const installatore = await getInstallatoreByUserId(ctx.user.id);
+        if (!installatore) throw new TRPCError({ code: "FORBIDDEN" });
+        const db = await (await import("./db")).getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+        const { documenti: documentiTable } = await import("../drizzle/schema");
+        const doc = await db.select().from(documentiTable).where(eq(documentiTable.id, input.documentoId)).limit(1);
+        if (!doc.length) throw new TRPCError({ code: "NOT_FOUND" });
+        if (doc[0].installatoreId !== installatore.id) throw new TRPCError({ code: "FORBIDDEN" });
+        const signedUrl = await storageGetSignedUrl(doc[0].storageKey);
+        return { url: signedUrl };
+      }),
+    uploadDocumento: protectedProcedure
+      .input(
+        z.object({
+          praticaId: z.number(),
+          nomeFile: z.string(),
+          tipoFile: z.string().optional(),
+          categoriaDocumento: z.string().optional(),
+          slotNome: z.string().optional(),
+          fileBase64: z.string(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        const installatore = await getInstallatoreByUserId(ctx.user.id);
+        if (!installatore) throw new TRPCError({ code: "FORBIDDEN" });
+        const buffer = Buffer.from(input.fileBase64, "base64");
+        const key = `pratiche/${installatore.id}/${input.praticaId}/${Date.now()}_${input.nomeFile}`;
+        const { url } = await storagePut(key, buffer, input.tipoFile ?? "application/octet-stream");
+        await createDocumento({
+          praticaId: input.praticaId,
+          installatoreId: installatore.id,
+          nomeFile: input.nomeFile,
+          tipoFile: input.tipoFile,
+          categoriaDocumento: input.categoriaDocumento,
+          slotNome: input.slotNome,
+          storageKey: key,
+          storageUrl: url,
+        });
+        return { success: true, url };
+      }),
+
+    invia: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        // Verifica che l'installatore abbia un pack attivo
+        const installatore = await getInstallatoreByUserId(ctx.user.id);
+        if (!installatore) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Devi registrarti come installatore" });
+        }
+        const hasPack = await hasPackAttivo(installatore.id);
+        if (!hasPack) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Devi acquistare un pack per inviare pratiche" });
+        }
+        await updatePraticaStato(input.id, "inviata");
+        return { success: true };
+      }),
+
+    tutte: adminProcedure.query(async () => {
+      return getAllPratiche();
+    }),
+
+    aggiornaStato: adminProcedure
+      .input(
+        z.object({
+          id: z.number(),
+          stato: z.enum(["bozza", "inviata", "in_lavorazione", "completata", "rifiutata"]),
+          noteAdmin: z.string().optional(),
+          statoIter: z.string().optional(),
+        })
+      )
+      .mutation(async ({ input }) => {
+        await updatePraticaStato(input.id, input.stato, input.noteAdmin, input.statoIter);
+        return { success: true };
+      }),
+
+    // Admin: crea pratica manualmente
+    creaAdmin: adminProcedure
+      .input(
+        z.object({
+          installatoreId: z.number(),
+          tipologia: z.enum(["residenziale", "business"]),
+          tipoIter: z.enum([
+            "connessione_ordinario",
+            "connessione_semplificato",
+            "gse",
+            "terna_gaudi",
+            "enea_conto_termico",
+            "dogane_officina_elettrica",
+            "dogane_dichiarazione_consumo",
+            "arera",
+            "distribuzione",
+          ]).default("connessione_semplificato"),
+          statoIter: z.string().optional(),
+          potenzaKw: z.string().optional(),
+          indirizzoImpianto: z.string().optional(),
+          comuneImpianto: z.string().optional(),
+          provinciaImpianto: z.string().optional(),
+          nomeTitolare: z.string().optional(),
+          note: z.string().optional(),
+          stato: z.enum(["bozza", "inviata", "in_lavorazione", "completata", "rifiutata"]).default("inviata"),
+          scalaPack: z.boolean().default(true),
+        })
+      )
+      .mutation(async ({ input }) => {
+        const { scalaPack, ...praticaData } = input;
+        const pratica = await createPraticaAdmin({
+          ...praticaData,
+          userId: 0,
+          statoIter: praticaData.statoIter ?? "documenti_raccolti",
+        });
+        if (scalaPack) {
+          await scalaPraticaDaOrdine(input.installatoreId, input.tipologia);
+        }
+        return pratica;
+      }),
+
+    // Admin: modifica pratica
+    modificaAdmin: adminProcedure
+      .input(
+        z.object({
+          id: z.number(),
+          tipologia: z.enum(["residenziale", "business"]).optional(),
+          tipoIter: z.enum([
+            "connessione_ordinario",
+            "connessione_semplificato",
+            "gse",
+            "terna_gaudi",
+            "enea_conto_termico",
+            "dogane_officina_elettrica",
+            "dogane_dichiarazione_consumo",
+            "arera",
+            "distribuzione",
+          ]).optional(),
+          statoIter: z.string().optional(),
+          potenzaKw: z.string().optional(),
+          indirizzoImpianto: z.string().optional(),
+          comuneImpianto: z.string().optional(),
+          provinciaImpianto: z.string().optional(),
+          nomeTitolare: z.string().optional(),
+          note: z.string().optional(),
+          noteAdmin: z.string().optional(),
+          stato: z.enum(["bozza", "inviata", "in_lavorazione", "completata", "rifiutata"]).optional(),
+        })
+      )
+      .mutation(async ({ input }) => {
+        const { id, ...data } = input;
+        await updatePratica(id, data);
+        return { success: true };
+      }),
+
+    // Admin: elimina pratica
+    eliminaAdmin: adminProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        await deletePratica(input.id);
+        return { success: true };
+      }),
+    // Installatore: aggiorna statoIter della pratica (passa allo step successivo)
+    aggiornaStatoIter: protectedProcedure
+      .input(
+        z.object({
+          praticaId: z.number(),
+          nuovoStatoIter: z.string(),
+        })
+      )
+      .mutation(async ({ input, ctx }) => {
+        const pratiche = await getPraticheByInstallatoreId(ctx.user.id);
+        const pratica = pratiche.find(p => p.id === input.praticaId);
+        if (!pratica) throw new TRPCError({ code: "NOT_FOUND", message: "Pratica non trovata" });
+        if (pratica.tipoIter && ITER_DEFINIZIONI[pratica.tipoIter as TipoIter]) {
+          const def = ITER_DEFINIZIONI[pratica.tipoIter as TipoIter];
+          const stepCorrente = def.steps.find(s => s.id === pratica.statoIter);
+          const prossimo = def.steps.find(s => s.id === input.nuovoStatoIter);
+          if (!stepCorrente || !prossimo) throw new TRPCError({ code: "BAD_REQUEST", message: "Step non valido" });
+          // Verifica documenti obbligatori dello step corrente
+          if (stepCorrente.documentiConPriorita) {
+            const obbligatori = stepCorrente.documentiConPriorita.filter((d: any) => d.priorita === "obbligatorio");
+            // TODO: Implementare query per verificare documenti caricati
+            const documentiCaricati: string[] = [];
+            const mancanti = obbligatori.filter((d: any) => !documentiCaricati.includes(d.nome));
+            if (mancanti.length > 0) {
+              throw new TRPCError({ code: "BAD_REQUEST", message: `Documenti obbligatori mancanti: ${mancanti.map((d: any) => d.nome).join(", ")}` });
+            }
+          }
+        }
+        await updatePraticaStato(input.praticaId, pratica.stato, undefined, input.nuovoStatoIter);
+        return { success: true };
+      }),
+  }),
+
+  // ─── DOCUMENTI ─────────────────────────────────────────────────────────────
+  documenti: router({
+    eliminaAdmin: adminProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        await deleteDocumento(input.id);
+        return { success: true };
+      }),
+  }),
+
+  // ─── PACK / CONTATORE ──────────────────────────────────────────────────────
+  pack: router({
+    mioRiepilogo: protectedProcedure.query(async ({ ctx }) => {
+      const installatore = await getInstallatoreByUserId(ctx.user.id);
+      if (!installatore) return null;
+      return getPackRiepilogo(installatore.id);
+    }),
+
+    riepilogoInstallatore: adminProcedure
+      .input(z.object({ installatoreId: z.number() }))
+      .query(async ({ input }) => {
+        return getPackRiepilogo(input.installatoreId);
+      }),
+  }),
+
+  // ─── RICARICHE ─────────────────────────────────────────────────────────────
+  ricariche: router({
+    mie: protectedProcedure.query(async ({ ctx }) => {
+      const installatore = await getInstallatoreByUserId(ctx.user.id);
+      if (!installatore) return [];
+      return getRicaricheByInstallatoreId(installatore.id);
+    }),
+  }),
+
+  // ─── STATISTICHE ADMIN ─────────────────────────────────────────────────────
+  admin: router({
+    statistiche: adminProcedure.query(async () => {
+      return getStatisticheAdmin();
+    }),
+    documenti: adminProcedure.query(async () => {
+      return getAllDocumenti();
+    }),
+
+    packAcquistati: adminProcedure
+      .input(z.object({ installatoreId: z.number() }))
+      .query(async ({ input }) => {
+        return getPackAcquistatiByInstallatore(input.installatoreId);
+      }),
+
+    // ─── BACKUP COMPLETO ────────────────────────────────────────────────────
+    esportaBackup: adminProcedure.query(async () => {
+      const [installatori, ordini, pratiche, documenti] = await Promise.all([
+        getAllInstallatori(),
+        getAllOrdini(),
+        getAllPratiche(),
+        getAllDocumenti(),
+      ]);
+      return {
+        versione: "1.0",
+        dataEsportazione: new Date().toISOString(),
+        sito: "Ricaricati di Connessioni",
+        installatori,
+        ordini,
+        pratiche,
+        documenti,
+      };
+    }),
+
+    // ─── BACKUP CONFIG ──────────────────────────────────────────────────────
+    getBackupConfig: adminProcedure.query(async () => {
+      return getBackupConfig();
+    }),
+
+    aggiornaBackupConfig: adminProcedure
+      .input(z.object({
+        frequenza: z.enum(["giornaliero", "settimanale", "mensile"]),
+        attivo: z.boolean(),
+      }))
+      .mutation(async ({ input }) => {
+        await upsertBackupConfig(input);
+        return { success: true };
+      }),
+
+    // ─── STORICO BACKUP ─────────────────────────────────────────────────────
+    storicoBackup: adminProcedure.query(async () => {
+      return getBackupStorico();
+    }),
+
+    // ─── SALVA BACKUP SU STORAGE ────────────────────────────────────────────
+    salvaBackupStorage: adminProcedure
+      .input(z.object({ tipo: z.enum(["manuale", "automatico"]).default("manuale") }))
+      .mutation(async ({ input }) => {
+        const [installatori, ordini, pratiche, documenti] = await Promise.all([
+          getAllInstallatori(),
+          getAllOrdini(),
+          getAllPratiche(),
+          getAllDocumenti(),
+        ]);
+        const backupData = {
+          versione: "1.0",
+          dataEsportazione: new Date().toISOString(),
+          sito: "Ricaricati di Connessioni",
+          installatori,
+          ordini,
+          pratiche,
+          documenti,
+        };
+        const json = JSON.stringify(backupData, null, 2);
+        const bytes = Buffer.from(json, "utf-8");
+        const key = `backups/ricaricati-backup-${new Date().toISOString().slice(0, 19).replace(/:/g, "-")}-${input.tipo}.json`;
+        const { url } = await storagePut(key, bytes, "application/json");
+        await createBackupStorico({
+          storageKey: key,
+          storageUrl: url,
+          dimensioneBytes: bytes.length,
+          stato: "completato",
+          tipo: input.tipo,
+        });
+        // Aggiorna ultimo backup nella config
+        const config = await getBackupConfig();
+        if (config) {
+          await upsertBackupConfig({ frequenza: config.frequenza, attivo: config.attivo });
+        }
+        return { success: true, url, dimensioneBytes: bytes.length };
+      }),
+
+    // ─── GESTIONE PACK (ADMIN) ────────────────────────────────────────────────
+    listaPack: adminProcedure.query(async () => {
+      // Restituisce i 3 pack fissi con statistiche ordini
+      const ordini = await getAllOrdini();
+      const pack1Ordini = ordini.filter((o: any) => o.packId === "pack1");
+      const pack2Ordini = ordini.filter((o: any) => o.packId === "pack2");
+      const pack3Ordini = ordini.filter((o: any) => o.packId === "pack3");
+      return [
+        { id: "pack1", nome: "Pack 1", prezzo: 2000, pratiche_incluse: PRATICHE_PER_PACK.pack1, pratiche_res: PRATICHE_RES_PER_PACK.pack1, pratiche_bus: PRATICHE_BUS_PER_PACK.pack1, ordini_totali: pack1Ordini.length, ordini_confermati: pack1Ordini.filter((o: any) => o.stato === "pagato").length },
+        { id: "pack2", nome: "Pack 2", prezzo: 3150, pratiche_incluse: PRATICHE_PER_PACK.pack2, pratiche_res: PRATICHE_RES_PER_PACK.pack2, pratiche_bus: PRATICHE_BUS_PER_PACK.pack2, ordini_totali: pack2Ordini.length, ordini_confermati: pack2Ordini.filter((o: any) => o.stato === "pagato").length },
+        { id: "pack3", nome: "Pack 3", prezzo: 5100, pratiche_incluse: PRATICHE_PER_PACK.pack3, pratiche_res: PRATICHE_RES_PER_PACK.pack3, pratiche_bus: PRATICHE_BUS_PER_PACK.pack3, ordini_totali: pack3Ordini.length, ordini_confermati: pack3Ordini.filter((o: any) => o.stato === "pagato").length },
+      ];
+    }),
+
+    ripristinaBackup: adminProcedure
+      .input(z.object({
+        backupJson: z.string().min(10),
+      }))
+      .mutation(async ({ input }) => {
+        let data: any;
+        try {
+          data = JSON.parse(input.backupJson);
+        } catch {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "File JSON non valido" });
+        }
+        if (!data.versione || !data.installatori) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Formato backup non riconosciuto" });
+        }
+        const db = await (await import("./db")).getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database non disponibile" });
+        const { installatori: instSchema, ordini: ordiniSchema, pratiche: praticheSchema, documenti: documentiSchema } = await import("../drizzle/schema");
+        let errori: string[] = [];
+        let contatori = { installatori: 0, ordini: 0, pratiche: 0, documenti: 0 };
+        // Ripristina installatori
+        for (const inst of (data.installatori ?? [])) {
+          const { id, createdAt, updatedAt, ...rest } = inst;
+          try {
+            await db.insert(instSchema).values({ ...rest, createdAt: new Date(createdAt), updatedAt: new Date(updatedAt) }).onDuplicateKeyUpdate({ set: rest });
+            contatori.installatori++;
+          } catch (e: any) { errori.push(`Installatore ${rest.ragioneSociale}: ${e?.message ?? e}`); }
+        }
+        // Ripristina ordini
+        for (const ord of (data.ordini ?? [])) {
+          const { id, createdAt, updatedAt, ...rest } = ord;
+          try {
+            await db.insert(ordiniSchema).values({ ...rest, createdAt: new Date(createdAt), updatedAt: new Date(updatedAt) }).onDuplicateKeyUpdate({ set: rest });
+            contatori.ordini++;
+          } catch (e: any) { errori.push(`Ordine: ${e?.message ?? e}`); }
+        }
+        // Ripristina pratiche
+        for (const prat of (data.pratiche ?? [])) {
+          const { id, createdAt, updatedAt, ...rest } = prat;
+          try {
+            await db.insert(praticheSchema).values({ ...rest, createdAt: new Date(createdAt), updatedAt: new Date(updatedAt) }).onDuplicateKeyUpdate({ set: rest });
+            contatori.pratiche++;
+          } catch (e: any) { errori.push(`Pratica: ${e?.message ?? e}`); }
+        }
+        // Ripristina documenti (solo metadati DB, i file S3 sono già in storage)
+        for (const doc of (data.documenti ?? [])) {
+          const { id, createdAt, ...rest } = doc;
+          try {
+            await db.insert(documentiSchema).values({ ...rest, createdAt: new Date(createdAt) }).onDuplicateKeyUpdate({ set: rest });
+            contatori.documenti++;
+          } catch (e: any) { errori.push(`Documento ${rest.nomeFile}: ${e?.message ?? e}`); }
+        }
+        const messaggio = `Ripristino completato: ${contatori.installatori} installatori, ${contatori.ordini} ordini, ${contatori.pratiche} pratiche, ${contatori.documenti} documenti.${errori.length > 0 ? ` (${errori.length} errori: ${errori.slice(0,3).join("; ")})` : ""}`;
+        return { success: true, messaggio, errori };
+      }),
+  }),
+
+  // ─── PROSPECT INSTALLATORI ──────────────────────────────────────────────────
+  prospectInstallatori: router({
+    lista: adminProcedure
+      .input(z.object({
+        regione: z.string().optional(),
+        provincia: z.string().optional(),
+        settore: z.string().optional(),
+        fasciaFatturato: z.string().optional(),
+        statoContatto: z.string().optional(),
+        q: z.string().optional(),
+      }).optional())
+      .query(async ({ input }) => {
+        return getProspectInstallatori(input ?? {});
+      }),
+    crea: adminProcedure
+      .input(z.object({
+        ragioneSociale: z.string().min(2),
+        settore: z.string().optional(),
+        regione: z.string().optional(),
+        provincia: z.string().optional(),
+        comune: z.string().optional(),
+        indirizzo: z.string().optional(),
+        telefono: z.string().optional(),
+        email: z.string().optional(),
+        sito: z.string().optional(),
+        fasciaFatturato: z.enum(["sotto_100k", "100k_500k", "500k_1m", "1m_5m", "sopra_5m"]).optional(),
+        dipendenti: z.number().optional(),
+        statoContatto: z.enum(["da_contattare", "contattato", "interessato", "cliente", "non_interessato"]).optional(),
+        note: z.string().optional(),
+        fonte: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        await createProspectInstallatore(input as any);
+        return { success: true };
+      }),
+    aggiorna: adminProcedure
+      .input(z.object({
+        id: z.number(),
+        ragioneSociale: z.string().optional(),
+        settore: z.string().optional(),
+        regione: z.string().optional(),
+        provincia: z.string().optional(),
+        comune: z.string().optional(),
+        telefono: z.string().optional(),
+        email: z.string().optional(),
+        fasciaFatturato: z.enum(["sotto_100k", "100k_500k", "500k_1m", "1m_5m", "sopra_5m"]).optional(),
+        statoContatto: z.enum(["da_contattare", "contattato", "interessato", "cliente", "non_interessato"]).optional(),
+        note: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const { id, ...data } = input;
+        await updateProspectInstallatore(id, data as any);
+        return { success: true };
+      }),
+    elimina: adminProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        await deleteProspectInstallatore(input.id);
+        return { success: true };
+      }),
+  }),
+
+  // ─── IMMOBILI FOTOVOLTAICO ───────────────────────────────────────────────────
+  immobiliFotovoltaico: router({
+    lista: publicProcedure
+      .input(z.object({
+        tipo: z.enum(["capannone", "terreno"]).optional(),
+        regione: z.string().optional(),
+        provincia: z.string().optional(),
+        attivitaEnergivora: z.boolean().optional(),
+        vicinanzaAutostrada: z.boolean().optional(),
+        vicinanzaAreaIndustriale: z.boolean().optional(),
+      }).optional())
+      .query(async ({ input }) => {
+        return getImmobiliFotovoltaico({ ...(input ?? {}), soloPublicati: true });
+      }),
+    listaAdmin: adminProcedure
+      .input(z.object({
+        tipo: z.enum(["capannone", "terreno"]).optional(),
+        regione: z.string().optional(),
+      }).optional())
+      .query(async ({ input }) => {
+        return getImmobiliFotovoltaico({ ...(input ?? {}), soloPublicati: false });
+      }),
+    crea: adminProcedure
+      .input(z.object({
+        tipo: z.enum(["capannone", "terreno"]),
+        titolo: z.string().min(3),
+        regione: z.string().optional(),
+        provincia: z.string().optional(),
+        comune: z.string().optional(),
+        indirizzo: z.string().optional(),
+        superficieMq: z.number().optional(),
+        superficieEttari: z.string().optional(),
+        attivitaEnergivora: z.boolean().optional(),
+        tipoAttivita: z.string().optional(),
+        vicinanzaAutostrada: z.boolean().optional(),
+        vicinanzaAreaIndustriale: z.boolean().optional(),
+        distanzaAutostradaKm: z.string().optional(),
+        distanzaAreaIndustrialeKm: z.string().optional(),
+        potenzaStimataKwp: z.string().optional(),
+        disponibilita: z.enum(["vendita", "affitto", "disponibile", "trattativa"]).optional(),
+        prezzoEuro: z.string().optional(),
+        nomeContatto: z.string().optional(),
+        telefonoContatto: z.string().optional(),
+        emailContatto: z.string().optional(),
+        note: z.string().optional(),
+        pubblicato: z.boolean().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        await createImmobileFotovoltaico(input as any);
+        return { success: true };
+      }),
+    aggiorna: adminProcedure
+      .input(z.object({
+        id: z.number(),
+        titolo: z.string().optional(),
+        regione: z.string().optional(),
+        provincia: z.string().optional(),
+        comune: z.string().optional(),
+        superficieMq: z.number().optional(),
+        superficieEttari: z.string().optional(),
+        attivitaEnergivora: z.boolean().optional(),
+        tipoAttivita: z.string().optional(),
+        vicinanzaAutostrada: z.boolean().optional(),
+        vicinanzaAreaIndustriale: z.boolean().optional(),
+        potenzaStimataKwp: z.string().optional(),
+        disponibilita: z.enum(["vendita", "affitto", "disponibile", "trattativa"]).optional(),
+        prezzoEuro: z.string().optional(),
+        nomeContatto: z.string().optional(),
+        telefonoContatto: z.string().optional(),
+        emailContatto: z.string().optional(),
+        note: z.string().optional(),
+        pubblicato: z.boolean().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const { id, ...data } = input;
+        await updateImmobileFotovoltaico(id, data as any);
+        return { success: true };
+      }),
+    elimina: adminProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        await deleteImmobileFotovoltaico(input.id);
+        return { success: true };
+      }),
+  }),
+
+  marketing: router({
+    cercaInstallatori: adminProcedure
+      .input(z.object({
+        regione: z.string().optional(),
+        settore: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const settore = input.settore || "installatori fotovoltaico";
+        const regione = input.regione || "Italia";
+        const query = `${settore} ${regione}`;
+        try {
+          const result = await makeRequest<any>("/maps/api/place/textsearch/json", {
+            query,
+            region: "it",
+            language: "it",
+          });
+          const gmResults = (result.results || []).map((r: any) => ({
+            ragioneSociale: r.name,
+            indirizzo: r.formatted_address || "",
+            regione: input.regione || "",
+            provincia: "",
+            comune: (r.formatted_address || "").split(",")[1]?.trim() || "",
+            telefono: r.formatted_phone_number || "",
+            email: "",
+            sito: r.website || "",
+            settore: settore,
+            rating: r.rating,
+            fonte: "google_maps",
+          }));
+          // Cerca anche su Pagine Gialle
+          const pgCat = (input.settore || "impianti-fotovoltaici").toLowerCase().replace(/ /g, "-");
+          const pgDove = (input.regione || "italia").toLowerCase();
+          let pgResults: any[] = [];
+          try {
+            const pgUrl = `https://www.paginegialle.it/${encodeURIComponent(pgCat)}/${encodeURIComponent(pgDove)}/1.html`;
+            const pgResp = await fetch(pgUrl, {
+              headers: { "User-Agent": "Mozilla/5.0 (compatible; Googlebot/2.1)" },
+            });
+            const html = await pgResp.text();
+            // Estrai nomi aziende
+            const nameMatches = html.matchAll(/class="[^"]*ql-item-name[^"]*"[^>]*>\s*<[^>]+>([^<]+)</g);
+            const phoneMatches = html.matchAll(/href="tel:([^"]+)"/g);
+            const names2 = Array.from(nameMatches).map((m: any) => m[1].trim());
+            const phones2 = Array.from(phoneMatches).map((m: any) => m[1].trim());
+            pgResults = names2.map((name: string, i: number) => ({
+              ragioneSociale: name,
+              telefono: phones2[i] || "",
+              regione: input.regione || "",
+              settore: settore,
+              fonte: "pagine_gialle",
+            }));
+          } catch (_e) { /* ignora errori PG */ }
+          // Unisci risultati (evita duplicati per nome)
+          const allNames = new Set(gmResults.map((r: any) => r.ragioneSociale.toLowerCase()));
+          const uniquePg = pgResults.filter((r: any) => !allNames.has(r.ragioneSociale.toLowerCase()));
+          const results = [...gmResults, ...uniquePg];
+          return { results, totale: results.length, gmCount: gmResults.length, pgCount: uniquePg.length };
+        } catch (e: any) {
+          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: e.message });
+        }
+      }),
+
+    importaRisultati: adminProcedure
+      .input(z.object({
+        records: z.array(z.object({
+          ragioneSociale: z.string(),
+          regione: z.string().optional(),
+          provincia: z.string().optional(),
+          comune: z.string().optional(),
+          telefono: z.string().optional(),
+          email: z.string().optional(),
+          sito: z.string().optional(),
+          settore: z.string().optional(),
+          indirizzo: z.string().optional(),
+          fonte: z.string().optional(),
+        }))
+      }))
+      .mutation(async ({ input }) => {
+        const toInsert = input.records.map(r => ({
+          ragioneSociale: r.ragioneSociale,
+          settore: r.settore || "Impianti Fotovoltaici",
+          regione: r.regione || "",
+          provincia: r.provincia || "",
+          comune: r.comune || "",
+          telefono: r.telefono || "",
+          email: r.email || "",
+          sito: r.sito || "",
+          statoContatto: "da_contattare" as const,
+          fonte: r.fonte || "manuale",
+          note: r.indirizzo ? `Indirizzo: ${r.indirizzo}` : "",
+        }));
+        const inserted = await bulkCreateProspectInstallatori(toInsert);
+        return { inserted };
+      }),
+
+    exportCsv: adminProcedure.query(async () => {
+      const installatori = await exportProspectInstallatori();
+      const headers = ["ragioneSociale","settore","regione","provincia","comune","telefono","email","sito","statoContatto","fonte","note"];
+      const rows = (installatori as any[]).map(i =>
+        headers.map(h => `"${(i[h] || "").toString().replace(/"/g, '""')}"`).join(",")
+      );
+      const csv = [headers.join(","), ...rows].join("\n");
+      return { csv, count: installatori.length };
+    }),
+
+    aggiornaStato: adminProcedure
+      .input(z.object({
+        id: z.number(),
+        statoContatto: z.enum(["da_contattare","contattato","interessato","cliente","non_interessato"]),
+        note: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        await aggiornaStatoContatto(input.id, input.statoContatto, input.note);
+        return { success: true };
+      }),
+
+    preparaMessaggi: adminProcedure
+      .input(z.object({
+        ids: z.array(z.number()),
+        canale: z.enum(["whatsapp", "email"]),
+        messaggio: z.string(),
+        oggetto: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const installatori = await getProspectInstallatori();
+        const selezionati = (installatori as any[]).filter(i => input.ids.includes(i.id));
+        const links = selezionati.map(inst => {
+          const testo = input.messaggio.replace(/\{nome\}/g, inst.ragioneSociale);
+          let link = "";
+          if (input.canale === "whatsapp") {
+            const tel = (inst.telefono || "").replace(/[^0-9+]/g, "");
+            const telF = tel.startsWith("+") ? tel : tel ? `+39${tel}` : "";
+            link = telF
+              ? `https://wa.me/${telF.replace("+","")}?text=${encodeURIComponent(testo)}`
+              : `https://wa.me/?text=${encodeURIComponent(testo)}`;
+          } else {
+            link = inst.email
+              ? `mailto:${inst.email}?subject=${encodeURIComponent(input.oggetto || "Proposta")}&body=${encodeURIComponent(testo)}`
+              : "";
+          }
+          return { nome: inst.ragioneSociale, link, canale: input.canale };
+        }).filter(l => l.link);
+        return { links, totale: links.length };
+      }),
+  }),
+
+});
+
+export type AppRouter = typeof appRouter;
